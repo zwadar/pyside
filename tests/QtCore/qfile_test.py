@@ -1,8 +1,36 @@
+#############################################################################
+##
+## Copyright (C) 2016 The Qt Company Ltd.
+## Contact: https://www.qt.io/licensing/
+##
+## This file is part of the test suite of PySide2.
+##
+## $QT_BEGIN_LICENSE:GPL-EXCEPT$
+## Commercial License Usage
+## Licensees holding valid commercial Qt licenses may use this file in
+## accordance with the commercial license agreement provided with the
+## Software or, alternatively, in accordance with the terms contained in
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see https://www.qt.io/terms-conditions. For further
+## information use the contact form at https://www.qt.io/contact-us.
+##
+## GNU General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU
+## General Public License version 3 as published by the Free Software
+## Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+## included in the packaging of this file. Please review the following
+## information to ensure the GNU General Public License requirements will
+## be met: https://www.gnu.org/licenses/gpl-3.0.html.
+##
+## $QT_END_LICENSE$
+##
+#############################################################################
 
 import unittest
 
 import os
 import tempfile
+import sys
 import py3kcompat as py3k
 
 from PySide2.QtCore import QFile, QIODevice
@@ -24,20 +52,28 @@ class GetCharTest(unittest.TestCase):
         '''QFile.getChar'''
         obj = QFile(self.filename)
         obj.open(QIODevice.ReadOnly)
-        self.assertEqual(obj.getChar(), (True, 'a'))
-        self.assertFalse(obj.getChar()[0])
-        obj.close()
+        try:
+            self.assertEqual(obj.getChar(), (True, 'a'))
+            self.assertFalse(obj.getChar()[0])
+        finally:
+            obj.close()
 
     def testBug721(self):
         obj = QFile(self.filename)
         obj.open(QIODevice.ReadOnly)
-        memory = obj.map(0, 1)
-        self.assertEqual(len(memory), 1)
-        self.assertEqual(memory[0], py3k.b('a'))
-        obj.unmap(memory)
-        # now memory points to wild bytes... :-)
-        # uncommenting this must cause a segfault.
-        # self.assertEqual(memory[0], 'a')
+        try:
+            memory = obj.map(0, 1)
+            self.assertEqual(len(memory), 1)
+            if sys.version_info[0] >= 3:
+                self.assertEqual(memory[0], ord('a'))
+            else:
+                self.assertEqual(memory[0], py3k.b('a'))
+            # now memory points to wild bytes... :-)
+            # uncommenting this must cause a segfault.
+            # self.assertEqual(memory[0], 'a')
+        finally:
+            obj.unmap(memory)
+            obj.close()
 
 if __name__ == '__main__':
     unittest.main()

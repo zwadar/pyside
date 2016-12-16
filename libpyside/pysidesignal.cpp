@@ -1,24 +1,41 @@
-/*
- * This file is part of the PySide project.
- *
- * Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
- *
- * Contact: PySide team <contact@pyside.org>
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
- */
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of PySide2.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <sbkpython.h>
 #include "pysidesignal.h"
@@ -72,7 +89,7 @@ static PyMappingMethods Signal_as_mapping = {
 
 static PyMethodDef Signal_methods[] = {
     {"__instancecheck__", (PyCFunction)metaSignalCheck, METH_O, NULL},
-    {0}
+    {0, 0, 0, 0}
 };
 
 PyTypeObject PySideSignalMetaType = {
@@ -107,6 +124,22 @@ PyTypeObject PySideSignalMetaType = {
     /*tp_members*/          0,
     /*tp_getset*/           0,
     /*tp_base*/             &PyType_Type,
+    /*tp_dict*/             0,
+    /*tp_descr_get*/        0,
+    /*tp_descr_set*/        0,
+    /*tp_dictoffset*/       0,
+    /*tp_init*/             0,
+    /*tp_alloc*/            0,
+    /*tp_new*/              0,
+    /*tp_free*/             0,
+    /*tp_is_gc*/            0,
+    /*tp_bases*/            0,
+    /*tp_mro*/              0,
+    /*tp_cache*/            0,
+    /*tp_subclasses*/       0,
+    /*tp_weaklist*/         0,
+    /*tp_del*/              0,
+    /*tp_version_tag*/      0
 };
 
 PyTypeObject PySideSignalType = {
@@ -156,13 +189,14 @@ PyTypeObject PySideSignalType = {
     /*tp_subclasses*/       0,
     /*tp_weaklist*/         0,
     /*tp_del*/              0,
+    /*tp_version_tag*/      0
 };
 
 static PyMethodDef SignalInstance_methods[] = {
     {"connect", (PyCFunction)signalInstanceConnect, METH_VARARGS|METH_KEYWORDS, 0},
     {"disconnect", signalInstanceDisconnect, METH_VARARGS, 0},
     {"emit", signalInstanceEmit, METH_VARARGS, 0},
-    {0}  /* Sentinel */
+    {0, 0, 0, 0}  /* Sentinel */
 };
 
 static PyMappingMethods SignalInstance_as_mapping = {
@@ -218,6 +252,7 @@ PyTypeObject PySideSignalInstanceType = {
     /*tp_subclasses*/       0,
     /*tp_weaklist*/         0,
     /*tp_del*/              0,
+    /*tp_version_tag*/      0
 };
 
 int signalTpInit(PyObject* self, PyObject* args, PyObject* kwds)
@@ -371,13 +406,17 @@ PyObject* signalInstanceConnect(PyObject* self, PyObject* args, PyObject* kwds)
     if (match) {
         Shiboken::AutoDecRef tupleArgs(PyList_AsTuple(pyArgs));
         Shiboken::AutoDecRef pyMethod(PyObject_GetAttrString(source->d->source, "connect"));
+        if (pyMethod.isNull()) { // PYSIDE-79: check if pyMethod exists.
+            PyErr_SetString(PyExc_RuntimeError, "method 'connect' vanished!");
+            return 0;
+        }
         PyObject* result = PyObject_CallObject(pyMethod, tupleArgs);
         if (result == Py_True)
             return result;
         else
             Py_XDECREF(result);
     }
-    if (PyErr_Occurred())
+    if (!PyErr_Occurred()) // PYSIDE-79: inverse the logic. A Null return needs an error.
         PyErr_Format(PyExc_RuntimeError, "Failed to connect signal %s.", source->d->signature);
     return 0;
 }
@@ -505,7 +544,7 @@ PyObject* signalInstanceCall(PyObject* self, PyObject* args, PyObject* kw)
     return PyCFunction_Call(homonymousMethod, args, kw);
 }
 
-static PyObject* metaSignalCheck(PyObject* klass, PyObject* args)
+static PyObject *metaSignalCheck(PyObject * /* klass */, PyObject* args)
 {
     if (PyType_IsSubtype(args->ob_type, &PySideSignalInstanceType))
         Py_RETURN_TRUE;
@@ -642,6 +681,9 @@ void appendSignature(PySideSignal* self, char* signature)
 PySideSignalInstance* initialize(PySideSignal* self, PyObject* name, PyObject* object)
 {
     PySideSignalInstance* instance = PyObject_New(PySideSignalInstance, &PySideSignalInstanceType);
+    SbkObject* sbkObj = reinterpret_cast<SbkObject*>(object);
+    if (!Shiboken::Object::wasCreatedByPython(sbkObj))
+        Py_INCREF(object); // PYSIDE-79: this flag was crucial for a wrapper call.
     instanceInitialize(instance, name, self, object, 0);
     return instance;
 }
@@ -694,7 +736,7 @@ PySideSignalInstance* newObjectFromMethod(PyObject* source, const QList<QMetaMet
 {
     PySideSignalInstance* root = 0;
     PySideSignalInstance* previous = 0;
-    foreach(QMetaMethod m, methodList) {
+    foreach (const QMetaMethod &m, methodList) {
         PySideSignalInstance* item = PyObject_New(PySideSignalInstance, &PySideSignalInstanceType);
         if (!root)
             root = item;
@@ -705,8 +747,9 @@ PySideSignalInstance* newObjectFromMethod(PyObject* source, const QList<QMetaMet
         item->d = new PySideSignalInstancePrivate;
         PySideSignalInstancePrivate* selfPvt = item->d;
         selfPvt->source = source;
+        Py_INCREF(selfPvt->source); // PYSIDE-79: an INCREF is missing.
         QByteArray cppName(m.methodSignature());
-        cppName = cppName.mid(0, cppName.indexOf('('));
+        cppName.truncate(cppName.indexOf('('));
         // separe SignalName
         selfPvt->signalName = strdup(cppName.data());
         selfPvt->signature = strdup(m.methodSignature());
@@ -776,7 +819,7 @@ static void _addSignalToWrapper(SbkObjectType* wrapperType, const char* signalNa
 }
 
 // This function is used by qStableSort to promote empty signatures
-static bool compareSignals(const QByteArray& sig1, const QByteArray& sig2)
+static bool compareSignals(const QByteArray &sig1, const QByteArray &)
 {
     return sig1.isEmpty();
 }
@@ -849,18 +892,19 @@ const char** getSignatures(PyObject* signal, int* size)
 
 QStringList getArgsFromSignature(const char* signature, bool* isShortCircuit)
 {
-    QString qsignature(signature);
+    const QString qsignature = QLatin1String(signature);
     QStringList result;
-    QRegExp splitRegex("\\s*,\\s*");
+    QRegExp splitRegex(QLatin1String("\\s*,\\s*"));
 
     if (isShortCircuit)
-        *isShortCircuit = !qsignature.contains('(');
-    if (qsignature.contains("()") || qsignature.contains("(void)")) {
+        *isShortCircuit = !qsignature.contains(QLatin1Char('('));
+    if (qsignature.contains(QLatin1String("()")) || qsignature.contains(QLatin1String("(void)"))) {
         return result;
-    } else if (qsignature.contains('(')) {
-        static QRegExp regex(".+\\((.*)\\)");
+    } else if (qsignature.contains(QLatin1Char('('))) {
+        static QRegExp regex(QLatin1String(".+\\((.*)\\)"));
         //get args types
-        QString types = qsignature.replace(regex, "\\1");
+        QString types = qsignature;
+        types.replace(regex, QLatin1String("\\1"));
         result = types.split(splitRegex);
     }
     return result;
@@ -869,8 +913,6 @@ QStringList getArgsFromSignature(const char* signature, bool* isShortCircuit)
 QString getCallbackSignature(const char* signal, QObject* receiver, PyObject* callback, bool encodeName)
 {
     QByteArray functionName;
-    QByteArray signature;
-    QStringList args;
     int numArgs = -1;
     bool useSelf = false;
     bool isMethod = PyMethod_Check(callback);
@@ -916,22 +958,19 @@ QString getCallbackSignature(const char* signal, QObject* receiver, PyObject* ca
 
     bool isShortCircuit = false;
 
-    if (encodeName)
-        signature = qPrintable(codeCallbackName(callback, functionName));
-    else
-        signature = functionName;
-
-    args = getArgsFromSignature(signal, &isShortCircuit);
+    const QString functionNameS = QLatin1String(functionName);
+    QString signature = encodeName ? codeCallbackName(callback, functionNameS) : functionNameS;
+    QStringList args = getArgsFromSignature(signal, &isShortCircuit);
 
     if (!isShortCircuit) {
-        signature.append('(');
+        signature.append(QLatin1Char('('));
         if (numArgs == -1)
             numArgs = std::numeric_limits<int>::max();
         while (args.count() && (args.count() > (numArgs - useSelf))) {
             args.removeLast();
         }
-        signature.append(args.join(","));
-        signature.append(')');
+        signature.append(args.join(QLatin1Char(',')));
+        signature.append(QLatin1Char(')'));
     }
     return signature;
 }

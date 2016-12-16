@@ -1,22 +1,43 @@
 <?xml version="1.0"?>
 <!--
-    This file is part of PySide project.
-    Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-    Contact: PySide team <contact@pyside.org>
-
-    This library is free software; you can redistribute it and/or
-    modify it under the terms of the GNU Lesser General Public
-    License as published by the Free Software Foundation; either
-    version 2.1 of the License, or (at your option) any later version.
-
-    This library is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-    Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public
-    License along with this library; if not, write to the Free Software
-    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of PySide2.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 -->
 <typesystem package="PySide2.QtCore">
     <load-typesystem name="typesystem_templates.xml" generate="no"/>
@@ -116,11 +137,6 @@
   <rejection class="*" function-name="qFreeAligned"/>
   <rejection class="QMetaMethod" enum-name="Attributes" />
 
-  <!-- Qt5: no longer here
-  <enum-type name="QtValidLicenseForOpenVGModule"/>
-  <enum-type name="QtValidLicenseForMultimediaModule"/>
-  <enum-type name="QtValidLicenseForDeclarativeModule" />
-  -->
   <!-- From Qt4.6 ^^^ -->
 
 
@@ -166,7 +182,6 @@
     <!-- FIXME APIExtractor or shiboken do not support multiple includes by primitive type -->
     <include file-name="signalmanager.h" location="global"/>
   </primitive-type>
-  <!-- Qt5: Replace QBool by bool -->
   <primitive-type name="bool" target-lang-api-name="PyBool">
     <conversion-rule>
         <native-to-target>
@@ -398,7 +413,7 @@
                 return 0;
             bool valueType = '*' != typeName[qstrlen(typeName) - 1];
             // Do not convert user type of value
-            if (valueType &amp;&mp; Shiboken::ObjectType::isUserType(type))
+            if (valueType &amp;&amp; Shiboken::ObjectType::isUserType(type))
                 return 0;
             int obTypeId = QMetaType::type(typeName);
             if (obTypeId) {
@@ -408,15 +423,19 @@
             // Do not resolve types to value type
             if (valueType)
                 return 0;
-            // find in base types
-            if (type->tp_base) {
-                return QVariant_resolveMetaType(type->tp_base, typeId);
-            } else if (type->tp_bases) {
+            // Find in base types. First check tp_bases, and only after check tp_base, because
+            // tp_base does not always point to the first base class, but rather to the first
+            // that has added any python fields or slots to its object layout.
+            // See https://mail.python.org/pipermail/python-list/2009-January/520733.html
+            if (type->tp_bases) {
                 for(int i = 0; i &lt; PyTuple_GET_SIZE(type->tp_bases); ++i) {
                     const char* derivedName = QVariant_resolveMetaType((PyTypeObject*)PyTuple_GET_ITEM(type->tp_bases, i), typeId);
                     if (derivedName)
                         return derivedName;
                 }
+            }
+            else if (type->tp_base) {
+                return QVariant_resolveMetaType(type->tp_base, typeId);
             }
         }
         *typeId = 0;
@@ -846,14 +865,9 @@
   <rejection class="QFile" function-name="setEncodingFunction"/>
   <rejection class="QRegion" function-name="cleanUp"/>
   <rejection class="QSettings" function-name="registerFormat"/>
-  <!-- Qt5: no more public
-  <rejection class="QAbstractFileEngineIterator" function-name="entryInfo"/>
-  <rejection class="QAbstractFileEngineIterator" enum-name="EntryInfoType"/>
-  -->
 
   <namespace-type name="Qt">
     <enum-type name="AlignmentFlag" flags="Alignment" />
-    <!-- Qt5: gone <enum-type name="AnchorAttribute"/> -->
     <enum-type name="AnchorPoint" since="4.6" />
     <enum-type name="ApplicationAttribute"/>
     <enum-type name="ApplicationState" flags="ApplicationStates" since="5.1"/> 
@@ -889,6 +903,7 @@
     <enum-type name="ImageConversionFlag" flags="ImageConversionFlags" />
     <enum-type name="InputMethodHint" flags="InputMethodHints" since="4.6"/>
     <enum-type name="InputMethodQuery"/>
+    <enum-type name="EnterKeyType"/>
     <enum-type name="ItemDataRole" force-integer="yes" />
     <enum-type name="ItemFlag" flags="ItemFlags"/>
     <enum-type name="ItemSelectionMode"/>
@@ -940,7 +955,6 @@
    <!--### These functions are part of QtGui, not QtCore -->
     <modify-function signature="codecForHtml(const QByteArray &amp;)" remove="all"/>
     <modify-function signature="mightBeRichText(const QString &amp;)" remove="all"/>
-    <!-- Qt5: gone <modify-function signature="escape(const QString&amp;)" remove="all"/> -->
     <modify-function signature="convertFromPlainText(const QString &amp;, Qt::WhiteSpaceMode)" remove="all"/>
     <!--### -->
   </namespace-type>
@@ -1045,7 +1059,7 @@
         Shiboken::GilState state;
         Shiboken::AutoDecRef arglist(PyTuple_New(3));
         PyTuple_SET_ITEM(arglist, 0, %CONVERTTOPYTHON[QtMsgType](type));
-        PyTuple_SET_ITEM(arglist, 1, %CONVERTTOPYTHON[QMessageLogContext](ctx));
+        PyTuple_SET_ITEM(arglist, 1, %CONVERTTOPYTHON[QMessageLogContext &amp;](ctx));
         QByteArray array = msg.toLatin1().data();
         char *data = array.data();
         PyTuple_SET_ITEM(arglist, 2, %CONVERTTOPYTHON[char *](data));
@@ -1978,7 +1992,6 @@
     <modify-function signature="exit(int)" allow-thread="yes" />
   </object-type>
 
-  <!-- Qt5: no longer public <object-type name="QAbstractFileEngineIterator"/> -->
   <object-type name="QAbstractItemModel">
     <enum-type name="LayoutChangeHint" />
     <!-- This function was replaced by a added function -->
@@ -2273,49 +2286,6 @@
         </inject-code>
     </add-function>
 
-    <!-- Qt5: this is gone
-    <template name="translate_utf8">
-    if (QCoreApplication::instance()) {
-        Shiboken::AutoDecRef klass(PyObject_GetAttrString(%PYSELF, "__class__"));
-        Shiboken::AutoDecRef cname(PyObject_GetAttrString(klass, "__name__"));
-        $DEFINE_SECOND_VAR
-        QString result = QCoreApplication::instance()->translate(Shiboken::String::toCString(cname.object()), $SECOND_VAR, %2, QCoreApplication::UnicodeUTF8, %3);
-        %PYARG_0 = %CONVERTTOPYTHON[QString](result);
-    } else {
-        Py_INCREF(%PYARG_1);
-        %PYARG_0 = %PYARG_1;
-    }
-    </template>
-    <add-function signature="trUtf8(const char *, const char *, int)" return-type="QString">
-        <modify-argument index="2">
-          <replace-default-expression with="0"/>
-        </modify-argument>
-        <modify-argument index="3">
-          <replace-default-expression with="-1"/>
-        </modify-argument>
-        <inject-code class="target" position="beginning">
-            <insert-template name="translate_utf8">
-                <replace from="$DEFINE_SECOND_VAR" to="" />
-                <replace from="$SECOND_VAR" to="%1" />
-            </insert-template>
-        </inject-code>
-    </add-function>
-    <add-function signature="trUtf8(PyUnicode, const char *, int)" return-type="QString">
-        <modify-argument index="2">
-          <replace-default-expression with="0"/>
-        </modify-argument>
-        <modify-argument index="3">
-          <replace-default-expression with="-1"/>
-        </modify-argument>
-        <inject-code class="target" position="beginning">
-            <insert-template name="translate_utf8">
-                <replace from="$DEFINE_SECOND_VAR" to="Shiboken::AutoDecRef str(PyUnicode_AsUTF8String(%1));" />
-                <replace from="$SECOND_VAR" to="Shiboken::String::toCString(str.object())" />
-            </insert-template>
-        </inject-code>
-    </add-function>
-    -->
-
    <modify-function signature="receivers(const char*) const">
      <inject-code class="target" position="beginning">
        // Avoid return +1 because SignalManager connect to "destroyed()" signal to control object timelife
@@ -2361,6 +2331,7 @@
   <value-type name="QUrl" hash-function="PySide::hash">
     <!-- Qt5: lots of changes -->
     <enum-type name="ComponentFormattingOption" flags="ComponentFormattingOptions" flags="FormattingOptions"/>
+    <!-- note: above duplication of attribute is not by default XML compliant! -->
     <enum-type name="UrlFormattingOption" />
     <enum-type name="UserInputResolutionOption" flags="UserInputResolutionOptions"/>
     <enum-type name="ParsingMode"/>
@@ -2853,6 +2824,7 @@
     <modify-function signature="rename(const QString&amp;)" allow-thread="yes"/>
     <modify-function signature="rename(const QString&amp;, const QString&amp;)" allow-thread="yes"/>
   </object-type>
+  <object-type name="QFileSelector" />
 
   <object-type name="QIODevice">
     <enum-type name="OpenModeFlag" flags="OpenMode"/>
@@ -3005,11 +2977,6 @@
         </inject-code>
     </add-function>
   </object-type>
-  <!-- Qt5: use QLocale, instead
-  <object-type name="QSystemLocale">
-    <enum-type name="QueryType"/>
-  </object-type>
-  -->
 
   <object-type name="QTemporaryFile">
     <extra-includes>
@@ -3035,18 +3002,6 @@
       </modify-function>
     </object-type>
 
-    <!-- Qt5: removed
-    <modify-function signature="setCodecForTr(QTextCodec*)">
-      <modify-argument index="1">
-        <parent index="this" action="add"/>
-      </modify-argument>
-    </modify-function>
-    <modify-function signature="setCodecForCStrings(QTextCodec*)">
-      <modify-argument index="1">
-        <parent index="this" action="add"/>
-      </modify-argument>
-    </modify-function>
-    -->
     <modify-function signature="setCodecForLocale(QTextCodec*)">
       <modify-argument index="1">
         <parent index="this" action="add"/>
@@ -3166,115 +3121,6 @@
         </inject-code>
     </add-function>
   </object-type>
-  <!-- Qt5: not here
-  <object-type name="QAbstractFileEngineHandler">
-      <modify-function signature="create(const QString&map;)const">
-        <modify-argument index="return">
-            <define-ownership owner="c++"/>
-        </modify-argument>
-      </modify-function>
-  </object-type>
-  -->
-  <!-- <object-type name="QAbstractFileEngine::MapExtensionOption" /> -->
-  <!-- <object-type name="QAbstractFileEngine::MapExtensionReturn" /> -->
-  <!-- <object-type name="QAbstractFileEngine::UnMapExtensionOption" /> -->
-
-  <!--
-  <object-type name="QAbstractFileEngine">
-    <enum-type name="Extension" extensible="yes"/>
-    <enum-type name="FileFlag" flags="FileFlags"/>
-    <enum-type name="FileName"/>
-    <enum-type name="FileOwner"/>
-    <enum-type name="FileTime"/>
-    <extra-includes>
-      <include file-name="QDateTime" location="global"/>
-    </extra-includes>
-
-    <modify-function signature="open(QFlags&lt;QIODevice::OpenModeFlag>)" allow-thread="yes" />
-    <modify-function signature="close()" allow-thread="yes" />
-    <modify-function signature="flush()" allow-thread="yes" />
-    <modify-function signature="seek(qint64)" allow-thread="yes" />
-    <modify-function signature="remove()" allow-thread="yes" />
-    <modify-function signature="copy(const QString&amp;)" allow-thread="yes" />
-    <modify-function signature="rename(const QString&amp;)" allow-thread="yes" />
-    <modify-function signature="link(const QString&amp;)" allow-thread="yes" />
-    <modify-function signature="mkdir(const QString&amp;, bool)const" allow-thread="yes" />
-    <modify-function signature="rmdir(const QString&amp;, bool)const" allow-thread="yes" />
-    <modify-function signature="write(const char*, qint64)" allow-thread="yes" />
-
-    <modify-function signature="beginEntryList(QFlags&lt;QDir::Filter>,const QStringList&amp;)">
-      <modify-argument index="return">
-        <define-ownership class="native" owner="c++"/>
-      </modify-argument>
-    </modify-function>
-
-    <modify-function signature="unmap(uchar*)">
-        <modify-argument index="1">
-            <replace-type modified-type="PyBuffer"/>
-        </modify-argument>
-        <inject-code>
-        uchar* ptr = (uchar*)Shiboken::Buffer::getPointer(%PYARG_1);
-        %RETURN_TYPE %0 = %CPPSELF.%FUNCTION_NAME(ptr);
-        %PYARG_0 = %CONVERTTOPYTHON[%RETURN_TYPE](%0);
-        </inject-code>
-    </modify-function>
-    <modify-function signature="map(qint64,qint64,QFile::MemoryMapFlags)">
-        <modify-argument index="return">
-            <replace-type modified-type="PyObject"/>
-        </modify-argument>
-        <inject-code>
-            %PYARG_0 = Shiboken::Buffer::newObject(%CPPSELF.%FUNCTION_NAME(%1, %2, %3), %2, Shiboken::Buffer::ReadWrite);
-        </inject-code>
-    </modify-function>
-
-    <modify-function signature="read(char*, qint64)" allow-thread="yes">
-        <inject-code class="target">
-            QByteArray ba;
-            ba.resize(%2);
-            %CPPSELF.%FUNCTION_NAME(ba.data(), ba.size());
-            %PYARG_0 = PyBytes_FromStringAndSize(ba.constData(), ba.size());
-        </inject-code>
-        <modify-argument index="1">
-            <remove-argument />
-        </modify-argument>
-        <modify-argument index="return">
-            <replace-type modified-type="PyObject"/>
-            <conversion-rule class="native">
-                %RETURN_TYPE %out;
-                if (!Shiboken::String::check(%PYARG_0)) {
-                    %out = -1;
-                } else {
-                    %out = PyBytes_GET_SIZE((PyObject*)%PYARG_0);
-                    memcpy(%1, PyBytes_AS_STRING((PyObject*)%PYARG_0), %out);
-                }
-            </conversion-rule>
-        </modify-argument>
-    </modify-function>
-    <modify-function signature="readLine(char*, qint64)" allow-thread="yes">
-        <inject-code class="target">
-            QByteArray ba;
-            ba.resize(%2);
-            %CPPSELF.%FUNCTION_NAME(ba.data(), ba.size());
-            %PYARG_0 = PyBytes_FromStringAndSize(ba.constData(), ba.size());
-        </inject-code>
-        <modify-argument index="1">
-            <remove-argument />
-        </modify-argument>
-        <modify-argument index="return">
-            <replace-type modified-type="PyObject"/>
-            <conversion-rule class="native">
-                %RETURN_TYPE %out;
-                if (!Shiboken::String::check(%PYARG_0)) {
-                    %out = -1;
-                } else {
-                    %out = PyBytes_GET_SIZE((PyObject*)%PYARG_0);
-                    memcpy(%1, PyBytes_AS_STRING((PyObject*)%PYARG_0), %out);
-                }
-            </conversion-rule>
-        </modify-argument>
-    </modify-function>
-  </object-type>
--->
   <object-type name="QProcess">
     <enum-type name="ExitStatus"/>
     <enum-type name="InputChannelMode"/>
@@ -3356,9 +3202,6 @@
     <modify-function signature="flush()" allow-thread="yes"/>
     <modify-function signature="sendEvent(QObject*, QEvent*)" allow-thread="yes"/>
     <modify-function signature="sendPostedEvents(QObject*, int)" allow-thread="yes"/>
-    <!-- Qt5: signature gone
-    <modify-function signature="sendPostedEvents()" allow-thread="yes"/>
-    -->
     <modify-function signature="instance()">
       <inject-code class="target">
         QCoreApplication* app = QCoreApplication::instance();
@@ -3702,13 +3545,6 @@
     <modify-function signature="readBytes(char*&amp;,uint&amp;)" remove="all"/>
     <modify-function signature="writeBytes(const char*,uint)" remove="all" />
   </object-type>
-  <!-- Qt5: no more public
-  <object-type name="QFSFileEngine">
-    <extra-includes>
-      <include file-name="QDateTime" location="global"/>
-    </extra-includes>
-  </object-type>
-  -->
 
   <value-type name="QTextStreamManipulator" default-constructor="QTextStreamManipulator(0, 0)">
     <modify-function signature="exec(QTextStream &amp;)" rename="exec_"/>
@@ -4188,9 +4024,6 @@ s1.addTransition(button.clicked, s1h)&lt;/code>
   <object-type name="QStateMachine" since="4.6">
     <enum-type name="Error"/>
     <enum-type name="EventPriority"/>
-    <!-- Qt5: gone
-    <enum-type name="RestorePolicy"/>
-    -->
 
     <value-type name="SignalEvent" since="4.6"/>
     <value-type name="WrappedEvent" since="4.6"/>

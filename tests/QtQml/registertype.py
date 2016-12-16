@@ -1,19 +1,44 @@
+#############################################################################
+##
+## Copyright (C) 2016 The Qt Company Ltd.
+## Contact: https://www.qt.io/licensing/
+##
+## This file is part of the test suite of PySide2.
+##
+## $QT_BEGIN_LICENSE:GPL-EXCEPT$
+## Commercial License Usage
+## Licensees holding valid commercial Qt licenses may use this file in
+## accordance with the commercial license agreement provided with the
+## Software or, alternatively, in accordance with the terms contained in
+## a written agreement between you and The Qt Company. For licensing terms
+## and conditions see https://www.qt.io/terms-conditions. For further
+## information use the contact form at https://www.qt.io/contact-us.
+##
+## GNU General Public License Usage
+## Alternatively, this file may be used under the terms of the GNU
+## General Public License version 3 as published by the Free Software
+## Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+## included in the packaging of this file. Please review the following
+## information to ensure the GNU General Public License requirements will
+## be met: https://www.gnu.org/licenses/gpl-3.0.html.
+##
+## $QT_END_LICENSE$
+##
+#############################################################################
+
 import sys
 import unittest
 
 import helper
 
 from PySide2.QtCore import Property, QTimer, QUrl
-from PySide2.QtGui import QGuiApplication, QPen, QColor
+from PySide2.QtGui import QGuiApplication, QPen, QColor, QPainter
 from PySide2.QtQml import qmlRegisterType, ListProperty
-from PySide2.QtQuick import QQuickView, QQuickItem
+from PySide2.QtQuick import QQuickView, QQuickItem, QQuickPaintedItem
 
-class PieSlice (QQuickItem):
-
+class PieSlice (QQuickPaintedItem):
     def __init__(self, parent = None):
-        QQuickItem.__init__(self, parent)
-        # need to disable this flag to draw inside a QQuickItem
-        self.setFlag(QGraphicsItem.ItemHasNoContents, False)
+        QQuickPaintedItem.__init__(self, parent)
         self._color = QColor()
         self._fromAngle = 0
         self._angleSpan = 0
@@ -40,7 +65,7 @@ class PieSlice (QQuickItem):
     fromAngle = Property(int, getFromAngle, setFromAngle)
     angleSpan = Property(int, getAngleSpan, setAngleSpan)
 
-    def paint(self, painter, options, widget):
+    def paint(self, painter):
         global paintCalled
         pen = QPen(self._color, 2)
         painter.setPen(pen);
@@ -49,7 +74,6 @@ class PieSlice (QQuickItem):
         paintCalled = True
 
 class PieChart (QQuickItem):
-
     def __init__(self, parent = None):
         QQuickItem.__init__(self, parent)
         self._name = ''

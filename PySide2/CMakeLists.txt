@@ -22,11 +22,11 @@ find_package(Qt5Script)
 find_package(Qt5ScriptTools)
 find_package(Qt5Help)
 find_package(Qt5Multimedia)
-find_package(Qt5Quick)
 find_package(Qt5Qml)
+find_package(Qt5Quick)
 find_package(Qt5QuickWidgets)
-find_package(Qt5WebEngineWidgets)
 find_package(Qt5WebChannel)
+find_package(Qt5WebEngineWidgets)
 find_package(Qt5WebSockets)
 
 if(UNIX AND NOT APPLE)
@@ -134,11 +134,11 @@ CHECK_PACKAGE_FOUND(Qt5Script opt)
 CHECK_PACKAGE_FOUND(Qt5ScriptTools opt)
 CHECK_PACKAGE_FOUND(Qt5Help opt)
 CHECK_PACKAGE_FOUND(Qt5Multimedia opt)
-CHECK_PACKAGE_FOUND(Qt5Quick opt)
 CHECK_PACKAGE_FOUND(Qt5Qml opt)
+CHECK_PACKAGE_FOUND(Qt5Quick opt)
 CHECK_PACKAGE_FOUND(Qt5QuickWidgets opt)
-CHECK_PACKAGE_FOUND(Qt5WebEngineWidgets opt)
 CHECK_PACKAGE_FOUND(Qt5WebChannel opt)
+CHECK_PACKAGE_FOUND(Qt5WebEngineWidgets opt)
 CHECK_PACKAGE_FOUND(Qt5WebSockets opt)
 
 if(UNIX AND NOT APPLE)
@@ -161,6 +161,11 @@ else()
 ENDIF()
 HAS_QT_MODULE(Qt5Gui_FOUND QtGui)
 HAS_QT_MODULE(Qt5Widgets_FOUND QtWidgets)
+# This module is deprecated and should be replaces by QtGui.
+# See http://doc.qt.io/qt-5/qtgui-index.html
+# Update: We support QtOpenGL now!
+# Note: The dependency is wrong: QtWidgets is needed!
+HAS_QT_MODULE(Qt5OpenGL_FOUND QtOpenGL)
 HAS_QT_MODULE(Qt5PrintSupport_FOUND QtPrintSupport)
 HAS_QT_MODULE(Qt5Svg_FOUND QtSvg)
 HAS_QT_MODULE(Qt5Sql_FOUND QtSql)
@@ -175,12 +180,6 @@ if(NOT MSVC)
 else()
     set(DISABLE_QtWebKitWidgets 1 PARENT_SCOPE)
 ENDIF()
-###
-# This module is deprecated! It should be replaces by QtGui.
-# We keep the source code until we are done with QtGui migration.
-# See http://doc.qt.io/qt-5/qtgui-index.html
-# HAS_QT_MODULE(Qt5OpenGL_FOUND QtOpenGL)
-###
 
 if(Qt5Designer_FOUND)
     HAS_QT_MODULE(Qt5UiTools_FOUND QtUiTools)
@@ -195,18 +194,12 @@ else()
     set(DISABLE_QtScriptTools 1 PARENT_SCOPE)
 ENDIF()
 HAS_QT_MODULE(Qt5Help_FOUND QtHelp)
-if(0)
-    ### crashes shiboken, as soon as 'QAbstractVideoBuffer' is touched!
-    HAS_QT_MODULE(Qt5Multimedia_FOUND QtMultimedia)
-else()
-    set(DISABLE_QtMultimedia 1 PARENT_SCOPE)
-endif()
-
-HAS_QT_MODULE(Qt5Quick_FOUND QtQuick)
+HAS_QT_MODULE(Qt5Multimedia_FOUND QtMultimedia)
 HAS_QT_MODULE(Qt5Qml_FOUND QtQml)
+HAS_QT_MODULE(Qt5Quick_FOUND QtQuick)
 HAS_QT_MODULE(Qt5QuickWidgets_FOUND QtQuickWidgets)
-HAS_QT_MODULE(Qt5WebEngineWidgets_FOUND QtWebEngineWidgets)
 HAS_QT_MODULE(Qt5WebChannel_FOUND QtWebChannel)
+HAS_QT_MODULE(Qt5WebEngineWidgets_FOUND QtWebEngineWidgets)
 HAS_QT_MODULE(Qt5WebSockets_FOUND QtWebSockets)
 
 if(UNIX AND NOT APPLE)

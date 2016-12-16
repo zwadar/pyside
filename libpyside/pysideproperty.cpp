@@ -1,24 +1,41 @@
-/*
- * This file is part of the PySide project.
- *
- * Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
- *
- * Contact: PySide team <contact@pyside.org>
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
- */
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of PySide2.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include <sbkpython.h>
 #include "pysideproperty.h"
@@ -48,11 +65,11 @@ static int qpropertyTraverse(PyObject* self, visitproc visit, void* arg);
 static int qpropertyClear(PyObject* self);
 
 static PyMethodDef PySidePropertyMethods[] = {
-    {"setter", (PyCFunction)qPropertySetter, METH_O},
-    {"write", (PyCFunction)qPropertySetter, METH_O},
-    {"getter", (PyCFunction)qPropertyGetter, METH_O},
-    {"read", (PyCFunction)qPropertyGetter, METH_O},
-    {0}
+    {"setter", (PyCFunction)qPropertySetter, METH_O, 0},
+    {"write", (PyCFunction)qPropertySetter, METH_O, 0},
+    {"getter", (PyCFunction)qPropertyGetter, METH_O, 0},
+    {"read", (PyCFunction)qPropertyGetter, METH_O, 0},
+    {0, 0, 0, 0}
 };
 
 PyTypeObject PySidePropertyType = {
@@ -102,6 +119,7 @@ PyTypeObject PySidePropertyType = {
     0,                         /*tp_subclasses */
     0,                         /*tp_weaklist */
     0,                         /*tp_del */
+    0                          /*tp_version_tag */
 };
 
 static void qpropertyMetaCall(PySideProperty* pp, PyObject* self, QMetaObject::Call call, void** args)
@@ -146,12 +164,15 @@ static void qpropertyMetaCall(PySideProperty* pp, PyObject* self, QMetaObject::C
         // just to avoid gcc warnings
         case QMetaObject::InvokeMetaMethod:
         case QMetaObject::CreateInstance:
+        case QMetaObject::IndexOfMethod:
+        case QMetaObject::RegisterPropertyMetaType:
+        case QMetaObject::RegisterMethodArgumentMetaType:
             break;
     }
 }
 
 
-static PyObject* qpropertyTpNew(PyTypeObject* subtype, PyObject* args, PyObject* kwds)
+static PyObject *qpropertyTpNew(PyTypeObject *subtype, PyObject * /* args */, PyObject * /* kwds */)
 {
     PySideProperty* me = reinterpret_cast<PySideProperty*>(subtype->tp_alloc(subtype, 0));
     me->d = new PySidePropertyPrivate;
@@ -214,7 +235,7 @@ void qpropertyDeAlloc(PyObject* self)
     Py_TYPE(self)->tp_free(self);
 }
 
-PyObject* qPropertyCall(PyObject* self, PyObject* args, PyObject* kw)
+PyObject *qPropertyCall(PyObject *self, PyObject *args, PyObject * /* kw */)
 {
     PyObject *callback = PyTuple_GetItem(args, 0);
     if (PyFunction_Check(callback)) {
@@ -318,7 +339,12 @@ static PyObject* getFromType(PyTypeObject* type, PyObject* name)
             if (attr)
                 return attr;
         }
+        // PYSIDE-79: needed to capture this code path - attr not found
+        return PyErr_Format(PyExc_RuntimeError, "*** Attribute '%s' not found!",
+                            Shiboken::String::toCString(name));
     }
+    Py_INCREF(attr); // PYSIDE-79: missing incref. PyDict_GetItem borrows a ref.
+    // This was not central to the error, but caused sometimes later crashes.
     return attr;
 }
 
@@ -418,7 +444,7 @@ PySideProperty* getObject(PyObject* source, PyObject* name)
     return 0;
 }
 
-bool isReadable(const PySideProperty* self)
+bool isReadable(const PySideProperty * /* self */)
 {
     return true;
 }

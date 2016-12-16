@@ -1,25 +1,42 @@
 // -*- mode: cpp;-*-
-/*
-* This file is part of the PySide project.
-*
-* Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-*
-* Contact: PySide team <contact@pyside.org>
-*
-* This library is free software; you can redistribute it and/or
-* modify it under the terms of the GNU Lesser General Public
-* License as published by the Free Software Foundation; either
-* version 2.1 of the License, or (at your option) any later version.
-*
-* This library is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-* Lesser General Public License for more details.
-*
-* You should have received a copy of the GNU Lesser General Public
-* License along with this library; if not, write to the Free Software
-* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-*/
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of PySide2.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "signalmanager.h"
 #include "pysidesignal.h"
@@ -235,11 +252,12 @@ struct SignalManager::SignalManagerPrivate
     ~SignalManagerPrivate()
     {
         if (!m_globalReceivers.isNull()) {
-            QList<GlobalReceiverV2*> values = m_globalReceivers->values();
-            m_globalReceivers->clear();
-            if (values.size()) {
-                qDeleteAll(values);
-            }
+            // Delete receivers by always retrieving the current first element, because deleting a
+            // receiver can indirectly delete another one, and if we use qDeleteAll, that could
+            // cause either a double delete, or iterator invalidation, and thus undefined behavior.
+            while (!m_globalReceivers->isEmpty())
+                delete *m_globalReceivers->cbegin();
+            Q_ASSERT(m_globalReceivers->isEmpty());
         }
     }
 };
@@ -355,8 +373,8 @@ QObject* SignalManager::globalReceiver(QObject *sender, PyObject *callback)
 int SignalManager::countConnectionsWith(const QObject *object)
 {
     int count = 0;
-    foreach(GlobalReceiverV2* g, m_d->m_globalReceivers->values()) {
-        if (g->refCount(object))
+    for (GlobalReceiverV2Map::const_iterator it = m_d->m_globalReceivers->cbegin(), end = m_d->m_globalReceivers->cend(); it != end; ++it) {
+        if (it.value()->refCount(object))
             count++;
     }
     return count;
@@ -497,7 +515,7 @@ int SignalManager::qt_metacall(QObject* object, QMetaObject::Call call, int id, 
                     PyErr_Fetch(&errType, &errValue, &errTraceback);
                     PyErr_Restore(errType, errValue, errTraceback);
 
-                    const char *errString = Shiboken::String::toCString(PyObject_Str(errValue));
+                    const QString errString = QLatin1String(Shiboken::String::toCString(PyObject_Str(errValue)));
 
                     PyErr_Print();
 
@@ -522,7 +540,14 @@ int SignalManager::qt_metacall(QObject* object, QMetaObject::Call call, int id, 
             }
 #endif
 
+            int reclimit = Py_GetRecursionLimit();
+            // Inspired by Python's errors.c: PyErr_GivenExceptionMatches() function.
+            // Temporarily bump the recursion limit, so that PyErr_Print will not raise a recursion
+            // error again. Don't do it when the limit is already insanely high, to avoid overflow.
+            if (reclimit < (1 << 30))
+                Py_SetRecursionLimit(reclimit + 5);
             PyErr_Print();
+            Py_SetRecursionLimit(reclimit);
         }
     }
 
@@ -656,7 +681,7 @@ static int callMethod(QObject* object, int id, void** args)
         Shiboken::GilState gil;
         PyObject* self = (PyObject*)Shiboken::BindingManager::instance().retrieveWrapper(object);
         QByteArray methodName = method.methodSignature();
-        methodName = methodName.left(methodName.indexOf('('));
+        methodName.truncate(methodName.indexOf('('));
         Shiboken::AutoDecRef pyMethod(PyObject_GetAttrString(self, methodName));
         return SignalManager::callPythonMetaMethod(method, args, pyMethod, false);
     }

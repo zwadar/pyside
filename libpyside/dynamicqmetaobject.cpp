@@ -1,24 +1,41 @@
-/*
-* This file is part of the PySide project.
-*
-* Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
-*
-* Contact: PySide team <contact@pyside.org>
-*
-* This library is free software; you can redistribute it and/or
-* modify it under the terms of the GNU Lesser General Public
-* License as published by the Free Software Foundation; either
-* version 2.1 of the License, or (at your option) any later version.
-*
-* This library is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-* Lesser General Public License for more details.
-*
-* You should have received a copy of the GNU Lesser General Public
-* License along with this library; if not, write to the Free Software
-* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-*/
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of PySide2.
+**
+** $QT_BEGIN_LICENSE:LGPL$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 3 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
+** packaging of this file. Please review the following information to
+** ensure the GNU Lesser General Public License version 3 requirements
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
+**
+** $QT_END_LICENSE$
+**
+****************************************************************************/
 
 #include "dynamicqmetaobject.h"
 #include "dynamicqmetaobject_p.h"
@@ -109,6 +126,7 @@ public:
     void updateMetaObject(QMetaObject* metaObj);
     void writeMethodsData(const QList<MethodData>& methods, unsigned int** data, QLinkedList<QByteArray>& strings, int* prtIndex, int nullIndex, int flags);
     void writeStringData(char *,  QLinkedList<QByteArray> &strings);
+    int getPropertyNotifyId(PySideProperty *property) const;
 };
 
 bool sortMethodSignalSlot(const MethodData &m1, const MethodData &m2)
@@ -139,7 +157,7 @@ static int blobSize(QLinkedList<QByteArray> &strings)
 
    QByteArray str;
    QByteArray debug_str;
-   foreach(QByteArray field, strings) {
+   foreach (const QByteArray &field, strings) {
       str.append(field);
       str.append(char(0));
 
@@ -254,7 +272,7 @@ uint PropertyData::flags() const
     else
         flags |= ResolveUser;
 
-    if (m_notifyId != -1)
+    if (m_cachedNotifyId != -1)
         flags |= Notify;
 
     if (PySide::Property::isConstant(m_data))
@@ -275,9 +293,9 @@ MethodData::MethodData()
 }
 
 MethodData::MethodData(QMetaMethod::MethodType mtype, const QByteArray& signature, const QByteArray& rtype)
-    : m_mtype(mtype)
-    , m_signature(QMetaObject::normalizedSignature(signature.constData()))
+    : m_signature(QMetaObject::normalizedSignature(signature.constData()))
     , m_rtype(QMetaObject::normalizedSignature(rtype.constData()))
+    , m_mtype(mtype)
 {
 }
 
@@ -324,12 +342,12 @@ QByteArray MethodData::name() const
 }
 
 PropertyData::PropertyData()
-    : m_notifyId(0), m_data(0)
+    : m_cachedNotifyId(0), m_data(0)
 {
 }
 
 PropertyData::PropertyData(const char* name, int notifyId, PySideProperty* data)
-    : m_name(name), m_notifyId(notifyId), m_data(data)
+    : m_name(name), m_cachedNotifyId(notifyId), m_data(data)
 {
 }
 
@@ -344,9 +362,9 @@ bool PropertyData::isValid() const
     return !m_name.isEmpty();
 }
 
-int PropertyData::notifyId() const
+int PropertyData::cachedNotifyId() const
 {
-    return m_notifyId;
+    return m_cachedNotifyId;
 }
 
 bool PropertyData::operator==(const PropertyData& other) const
@@ -356,7 +374,7 @@ bool PropertyData::operator==(const PropertyData& other) const
 
 bool PropertyData::operator==(const char* name) const
 {
-    return m_name == QString(name);
+    return m_name == name;
 }
 
 
@@ -413,6 +431,16 @@ int DynamicQMetaObject::addMethod(QMetaMethod::MethodType mtype, const char* sig
         counter++;
     }
 
+    // Common mistake not to add parentheses to the signature.
+    if ((strchr(signature, ')') == 0) || ((strchr(signature, '(') == 0))) {
+        const QString message =
+                QLatin1String("DynamicQMetaObject::addMethod: Invalid method signature "
+                "provided for ") + QLatin1String(signature);
+        const QByteArray messageLatin = message.toLatin1();
+        PyErr_WarnEx(PyExc_RuntimeWarning, messageLatin.constData(), 0);
+        return -1;
+    }
+
     //has blank method
     if (index != -1) {
         m_d->m_methods[index] = MethodData(mtype, signature, type);
@@ -466,15 +494,8 @@ int DynamicQMetaObject::addProperty(const char* propertyName, PyObject* data)
         return m_d->m_propertyOffset + index;
 
     // retrieve notifyId
-    int notifyId = -1;
-    PySideProperty* property = reinterpret_cast<PySideProperty*>(data);
-    if (property->d->notify) {
-        const char* signalNotify = PySide::Property::getNotifyName(property);
-        if (signalNotify) {
-            MethodData signalObject(QMetaMethod::Signal, signalNotify, "");
-            notifyId = m_d->m_methods.indexOf(signalObject);
-        }
-    }
+    PySideProperty *property = reinterpret_cast<PySideProperty *>(data);
+    const int notifyId = m_d->getPropertyNotifyId(property);
 
     //search for a empty space
     PropertyData blank;
@@ -487,6 +508,18 @@ int DynamicQMetaObject::addProperty(const char* propertyName, PyObject* data)
     }
     m_d->m_updated = false;
     return  m_d->m_propertyOffset + index;
+}
+
+int DynamicQMetaObject::DynamicQMetaObjectPrivate::getPropertyNotifyId(PySideProperty *property) const {
+    int notifyId = -1;
+    if (property->d->notify) {
+        const char *signalNotify = PySide::Property::getNotifyName(property);
+        if (signalNotify) {
+            const MethodData signalObject(QMetaMethod::Signal, signalNotify, "");
+            notifyId = m_methods.indexOf(signalObject);
+        }
+    }
+    return notifyId;
 }
 
 void DynamicQMetaObject::addInfo(const char* key, const char* value)
@@ -581,7 +614,7 @@ void DynamicQMetaObject::parsePythonType(PyTypeObject* type)
                     sig += data->signatures[i];
                 sig += ')';
                 if (d.superdata->indexOfSignal(sig) == -1)
-                    addSignal(sig);
+                    addSignal(sig, "void");
             }
         } else if (PyFunction_Check(value)) { // Register slots
             if (PyObject_HasAttr(value, slotAttrName)) {
@@ -600,10 +633,10 @@ void DynamicQMetaObject::parsePythonType(PyTypeObject* type)
     }
 
     // Register properties
-    foreach (PropPair propPair, properties)
+    foreach (const PropPair &propPair, properties)
         addProperty(propPair.first, propPair.second);
 
-    
+
 }
 
 /*!
@@ -612,10 +645,9 @@ void DynamicQMetaObject::parsePythonType(PyTypeObject* type)
 */
 int DynamicQMetaObject::DynamicQMetaObjectPrivate::createMetaData(QMetaObject* metaObj, QLinkedList<QByteArray> &strings)
 {
-    uint n_methods = m_methods.size();
-    uint n_properties = m_properties.size();
-    uint n_info = m_info.size();
-    uint n_signal = 0; // Signal count will be computed later..
+    const int n_methods = m_methods.size();
+    const int n_properties = m_properties.size();
+    const int n_info = m_info.size();
 
     int header[] = {7,                  // revision (Used by moc, qmetaobjectbuilder and qdbus)
                     0,                  // class name index in m_metadata
@@ -634,7 +666,7 @@ int DynamicQMetaObject::DynamicQMetaObjectPrivate::createMetaData(QMetaObject* m
     m_dataSize += n_methods*5;     //method: name, argc, parameters, tag, flags
     m_dataSize += n_properties*4;  //property: name, type, flags
     m_dataSize += 1;               //eod
-    
+
     m_dataSize += aggregateParameterCount(m_methods); // types and parameter names
 
     uint* data = reinterpret_cast<uint*>(realloc(const_cast<uint*>(metaObj->d.data), m_dataSize * sizeof(uint)));
@@ -674,14 +706,14 @@ void DynamicQMetaObject::DynamicQMetaObjectPrivate::updateMetaObject(QMetaObject
     m_dataSize = 0;
 
     // Recompute the size and reallocate memory
-    // index is set after the last header field
+    // index is set after the last header field.
     index = createMetaData(metaObj, strings);
     data = const_cast<uint*>(metaObj->d.data);
 
     registerString(m_className, strings); // register class string
     m_nullIndex = registerString("", strings); // register a null string
 
-    //write class info
+    // Write class info.
     if (m_info.size()) {
         if (data[3] == 0)
             data[3] = index;
@@ -696,32 +728,9 @@ void DynamicQMetaObject::DynamicQMetaObjectPrivate::updateMetaObject(QMetaObject
         }
     }
 
-    //write properties
-    if (m_properties.size()) {
-        if (data[7] == 0)
-            data[7] = index;
-
-        QList<PropertyData>::const_iterator i = m_properties.constBegin();
-        while(i != m_properties.constEnd()) {
-            if (i->isValid()) {
-                data[index++] = registerString(i->name(), strings); // name
-            } else
-                data[index++] = m_nullIndex;
-
-            data[index++] = (i->isValid() ? (registerString(i->type(), strings)) :  m_nullIndex); // normalized type
-            data[index++] = i->flags();
-            i++;
-        }
-
-        //write properties notify
-        i = m_properties.constBegin();
-        while(i != m_properties.constEnd()) {
-            data[index++] = i->notifyId() >= 0 ? i->notifyId() : 0; //signal notify index
-            i++;
-        }
-    }
-
-    //write signals/slots (signals must be written first, see indexOfMethodRelative in qmetaobject.cpp)
+    // Write methods first, then properties, to be consistent with moc.
+    // Write signals/slots (signals must be written first, see indexOfMethodRelative in
+    // qmetaobject.cpp).
     qStableSort(m_methods.begin(), m_methods.end(), sortMethodSignalSlot);
 
     if (m_methods.size()) {
@@ -731,7 +740,7 @@ void DynamicQMetaObject::DynamicQMetaObjectPrivate::updateMetaObject(QMetaObject
         writeMethodsData(m_methods, &data, strings, &index, m_nullIndex, AccessPublic);
     }
 
-    //write signal/slots parameters
+    // Write signal/slots parameters.
     if (m_methods.size()) {
        QList<MethodData>::iterator it = m_methods.begin();
        for (; it != m_methods.end(); ++it) {
@@ -754,9 +763,47 @@ void DynamicQMetaObject::DynamicQMetaObjectPrivate::updateMetaObject(QMetaObject
        }
     }
 
+    // Write properties.
+    if (m_properties.size()) {
+        if (data[7] == 0)
+            data[7] = index;
+
+        QList<PropertyData>::const_iterator i = m_properties.constBegin();
+        while (i != m_properties.constEnd()) {
+            if (i->isValid()) {
+                data[index++] = registerString(i->name(), strings); // name
+            } else
+                data[index++] = m_nullIndex;
+
+            // Find out the property type index.
+            int typeInfo = m_nullIndex;
+            if (i->isValid()) {
+                const QByteArray &typeName = i->type();
+                if (QtPrivate::isBuiltinType(typeName))
+                   typeInfo = QMetaType::type(typeName);
+                else
+                   typeInfo = IsUnresolvedType | registerString(typeName, strings);
+            }
+            data[index++] = typeInfo; // normalized type
+
+            data[index++] = i->flags();
+            i++;
+        }
+
+        // Write properties notify.
+        i = m_properties.constBegin();
+        while (i != m_properties.constEnd()) {
+            // Recompute notifyId, because sorting the methods might have changed the relative
+            // index.
+            const int notifyId = getPropertyNotifyId(i->data());
+            data[index++] = notifyId >= 0 ? static_cast<uint>(notifyId) : 0; //signal notify index
+            i++;
+        }
+    }
+
     data[index++] = 0; // the end
 
-    // create the m_metadata string
+    // Create the m_metadata string.
     int size = blobSize(strings);
     char *blob = reinterpret_cast<char *>(realloc((char*)metaObj->d.stringdata, size));
     writeStringData(blob, strings);

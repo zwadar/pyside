@@ -34,12 +34,37 @@ set(libpyside_SRC
     ${DESTROYLISTENER_MOC}
 )
 
+# Add python files to project explorer in Qt Creator, when opening the CMakeLists.txt as a project,
+# so you can look up python files with the Locator.
+macro(add_other_files)
+     foreach(_it ${ARGN})
+         if(NOT IS_DIRECTORY ${_it})
+             get_filename_component(name ${_it} NAME)
+             if(NOT ${_it} MATCHES "^/\\\\..*$;~$")
+                 set_source_files_properties(${_it} PROPERTIES HEADER_FILE_ONLY TRUE)
+             endif()
+         endif()
+     endforeach()
+endmacro()
+
+# Test files.
+file(GLOB_RECURSE pyside_folder_py_files "../*.py")
+
+# Example files.
+file(GLOB_RECURSE example_folder_py_files "../../pyside2-examples/*.py")
+
+# Mostly for setup.py.
+file(GLOB setup_folder_py_files "../../../*.py")
+
+set(other_files ${pyside_folder_py_files} ${example_folder_py_files} ${setup_folder_py_files})
+add_other_files(${other_files})
+
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}
                     ${SHIBOKEN_INCLUDE_DIR}
                     ${SHIBOKEN_PYTHON_INCLUDE_DIR}
                     ${QML_INCLUDES}
                     ${Qt5Core_INCLUDE_DIRS})
-add_library(pyside2 SHARED ${libpyside_SRC})
+add_library(pyside2 SHARED ${libpyside_SRC} ${other_files})
 target_link_libraries(pyside2
                       ${SHIBOKEN_PYTHON_LIBRARIES}
                       ${SHIBOKEN_LIBRARY}
@@ -51,6 +76,10 @@ set_target_properties(pyside2 PROPERTIES
                       SOVERSION "${BINDING_API_MAJOR_VERSION}.${BINDING_API_MINOR_VERSION}"
                       OUTPUT_NAME "pyside2${pyside2_SUFFIX}${SHIBOKEN_PYTHON_EXTENSION_SUFFIX}"
                       DEFINE_SYMBOL PYSIDE_EXPORTS)
+
+if(QML_SUPPORT)
+    target_compile_definitions(pyside2 PUBLIC PYSIDE_QML_SUPPORT=1)
+endif()
 
 #
 # install stuff
@@ -77,6 +106,8 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 else()
     set(LIBRARY_OUTPUT_SUFFIX ${CMAKE_RELEASE_POSTFIX})
 endif()
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D QT_NO_CAST_FROM_ASCII -D QT_NO_CAST_TO_ASCII")
 
 # create pkg-config file
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/pyside2.pc.in"
