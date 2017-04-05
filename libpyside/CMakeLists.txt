@@ -1,5 +1,21 @@
 project(libpyside)
 
+if(${Qt5Qml_FOUND})
+if(NOT "${Qt5Qml_PRIVATE_INCLUDE_DIRS}" MATCHES "/QtQml/")
+    string(REPLACE "/QtCore" "/QtQml" replaceme "${Qt5Core_PRIVATE_INCLUDE_DIRS}")
+    list(APPEND Qt5Qml_PRIVATE_INCLUDE_DIRS ${replaceme})
+    list(REMOVE_DUPLICATES Qt5Qml_PRIVATE_INCLUDE_DIRS)
+endif()
+endif()
+if(${Qt5Quick_FOUND})
+if(NOT "${Qt5Quick_PRIVATE_INCLUDE_DIRS}" MATCHES "/QtQuick/")
+    string(REPLACE "/QtCore" "/QtQuick" replaceme "${Qt5Core_PRIVATE_INCLUDE_DIRS}")
+    list(APPEND Qt5Quick_PRIVATE_INCLUDE_DIRS ${Qt5Qml_PRIVATE_INCLUDE_DIRS})
+    list(APPEND Qt5Quick_PRIVATE_INCLUDE_DIRS ${replaceme})
+    list(REMOVE_DUPLICATES Qt5Quick_PRIVATE_INCLUDE_DIRS)
+endif()
+endif()
+
 if(Qt5Qml_FOUND AND Qt5Qml_PRIVATE_INCLUDE_DIRS)
     set(QML_INCLUDES ${Qt5Qml_INCLUDE_DIRS} ${Qt5Qml_PRIVATE_INCLUDE_DIRS})
     set(QML_LIBRARIES ${Qt5Qml_LIBRARIES})
@@ -77,6 +93,10 @@ set_target_properties(pyside2 PROPERTIES
                       OUTPUT_NAME "pyside2${pyside2_SUFFIX}${SHIBOKEN_PYTHON_EXTENSION_SUFFIX}"
                       DEFINE_SYMBOL PYSIDE_EXPORTS)
 
+if(Qt5Core_VERSION VERSION_GREATER "5.7.1")
+    set_property(TARGET pyside2 PROPERTY CXX_STANDARD 11)
+endif()
+
 if(QML_SUPPORT)
     target_compile_definitions(pyside2 PUBLIC PYSIDE_QML_SUPPORT=1)
 endif()
@@ -113,7 +133,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D QT_NO_CAST_FROM_ASCII -D QT_NO_CAST_T
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/pyside2.pc.in"
                "${CMAKE_CURRENT_BINARY_DIR}/pyside2${pyside2_SUFFIX}.pc" @ONLY)
 # create cmake-config files
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/PySide2Config.cmake.in" 
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/PySide2Config.cmake.in"
                "${CMAKE_CURRENT_BINARY_DIR}/PySide2Config.cmake" @ONLY)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/PySide2Config-spec.cmake.in"
                "${CMAKE_CURRENT_BINARY_DIR}/PySide2Config${SHIBOKEN_PYTHON_EXTENSION_SUFFIX}.cmake" @ONLY)
@@ -126,7 +146,7 @@ install(TARGETS pyside2 EXPORT pyside2
                         LIBRARY DESTINATION "${LIB_INSTALL_DIR}"
                         ARCHIVE DESTINATION "${LIB_INSTALL_DIR}"
                         RUNTIME DESTINATION bin)
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/pyside2${pyside2_SUFFIX}.pc" 
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/pyside2${pyside2_SUFFIX}.pc"
         DESTINATION "${LIB_INSTALL_DIR}/pkgconfig")
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/PySide2Config.cmake"
         DESTINATION "${LIB_INSTALL_DIR}/cmake/PySide2-${BINDING_API_VERSION}")

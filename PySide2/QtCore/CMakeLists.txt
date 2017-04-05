@@ -31,6 +31,8 @@ ${QtCore_GEN_DIR}/qbuffer_wrapper.cpp
 ${QtCore_GEN_DIR}/qbytearray_wrapper.cpp
 ${QtCore_GEN_DIR}/qbytearraymatcher_wrapper.cpp
 ${QtCore_GEN_DIR}/qchildevent_wrapper.cpp
+${QtCore_GEN_DIR}/qcollator_wrapper.cpp
+${QtCore_GEN_DIR}/qcollatorsortkey_wrapper.cpp
 ${QtCore_GEN_DIR}/qcoreapplication_wrapper.cpp
 ${QtCore_GEN_DIR}/qcryptographichash_wrapper.cpp
 ${QtCore_GEN_DIR}/qdatastream_wrapper.cpp
@@ -75,6 +77,8 @@ ${QtCore_GEN_DIR}/qmetaobject_connection_wrapper.cpp
 ${QtCore_GEN_DIR}/qmetaobject_wrapper.cpp
 ${QtCore_GEN_DIR}/qmetaproperty_wrapper.cpp
 ${QtCore_GEN_DIR}/qmimedata_wrapper.cpp
+${QtCore_GEN_DIR}/qmimedatabase_wrapper.cpp
+${QtCore_GEN_DIR}/qmimetype_wrapper.cpp
 ${QtCore_GEN_DIR}/qmodelindex_wrapper.cpp
 ${QtCore_GEN_DIR}/qmutex_wrapper.cpp
 ${QtCore_GEN_DIR}/qmutexlocker_wrapper.cpp
@@ -105,6 +109,7 @@ ${QtCore_GEN_DIR}/qsizef_wrapper.cpp
 ${QtCore_GEN_DIR}/qsocketnotifier_wrapper.cpp
 ${QtCore_GEN_DIR}/qsortfilterproxymodel_wrapper.cpp
 ${QtCore_GEN_DIR}/qstate_wrapper.cpp
+${QtCore_GEN_DIR}/qstandardpaths_wrapper.cpp
 ${QtCore_GEN_DIR}/qstatemachine_signalevent_wrapper.cpp
 ${QtCore_GEN_DIR}/qstatemachine_wrappedevent_wrapper.cpp
 ${QtCore_GEN_DIR}/qstatemachine_wrapper.cpp

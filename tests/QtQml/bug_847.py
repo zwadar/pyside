@@ -34,6 +34,8 @@
 # Released under the same terms as PySide itself
 # 2011-05-04 Thomas Perl <m@thp.io>
 
+from __future__ import print_function
+
 import unittest
 
 from helper import adjust_filename, UsesQApplication
@@ -55,7 +57,7 @@ class TestQML(UsesQApplication):
     def done(self, x, y):
         self._sucess = True
         self.app.quit()
-        print "done called"
+        print("done called")
 
     def testPythonSlot(self):
         self._sucess = False

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of PySide2.
@@ -131,9 +131,9 @@ public:
 
 bool sortMethodSignalSlot(const MethodData &m1, const MethodData &m2)
 {
-   if (m1.methodType() == QMetaMethod::Signal)
-      return m2.methodType() == QMetaMethod::Slot;
-   return false;
+    if (m1.methodType() == QMetaMethod::Signal)
+        return m2.methodType() == QMetaMethod::Slot;
+    return false;
 }
 
 static int registerString(const QByteArray& s, QLinkedList<QByteArray>& strings)
@@ -411,7 +411,7 @@ DynamicQMetaObject::DynamicQMetaObject(const char* className, const QMetaObject*
 
 DynamicQMetaObject::~DynamicQMetaObject()
 {
-    free((char *)(d.stringdata));
+    free(reinterpret_cast<char *>(const_cast<QByteArrayData *>(d.stringdata)));
     free(const_cast<uint*>(d.data));
     delete m_d;
 }
@@ -510,7 +510,8 @@ int DynamicQMetaObject::addProperty(const char* propertyName, PyObject* data)
     return  m_d->m_propertyOffset + index;
 }
 
-int DynamicQMetaObject::DynamicQMetaObjectPrivate::getPropertyNotifyId(PySideProperty *property) const {
+int DynamicQMetaObject::DynamicQMetaObjectPrivate::getPropertyNotifyId(PySideProperty *property) const
+{
     int notifyId = -1;
     if (property->d->notify) {
         const char *signalNotify = PySide::Property::getNotifyName(property);
@@ -583,60 +584,101 @@ void DynamicQMetaObject::DynamicQMetaObjectPrivate::writeMethodsData(const QList
     *prtIndex = index;
 }
 
-void DynamicQMetaObject::parsePythonType(PyTypeObject* type)
+void DynamicQMetaObject::parsePythonType(PyTypeObject *type)
 {
-    PyObject* attrs = type->tp_dict;
-    PyObject* key = 0;
-    PyObject* value = 0;
-    Py_ssize_t pos = 0;
+    // Get all non-QObject-derived base types in method resolution order, filtering out the types
+    // that can't have signals, slots or properties.
+    // This enforces registering of all signals and slots at type parsing time, and not later at
+    // signal connection time, thus making sure no method indices change which would break
+    // existing connections.
+    const PyObject *mro = type->tp_mro;
+    const Py_ssize_t basesCount = PyTuple_GET_SIZE(mro);
+    PyTypeObject *qObjectType = Shiboken::Conversions::getPythonTypeObject("QObject*");
+    QVector<PyTypeObject *> basesToCheck;
+    for (Py_ssize_t i = 0; i < basesCount; ++i) {
+        PyTypeObject *baseType = reinterpret_cast<PyTypeObject *>(PyTuple_GET_ITEM(mro, i));
+        if (PyType_IsSubtype(baseType, qObjectType)
+                || baseType == reinterpret_cast<PyTypeObject *>(&SbkObject_Type)
+                || baseType == reinterpret_cast<PyTypeObject *>(&PyBaseObject_Type)) {
+            continue;
+        } else {
+            basesToCheck.append(baseType);
+        }
+    }
 
-    typedef std::pair<const char*, PyObject*> PropPair;
-    QLinkedList<PropPair> properties;
+    // Prepend the actual type that we are parsing.
+    basesToCheck.prepend(type);
+    // PYSIDE-315: Handle all signals first, in all involved types.
+    for (int baseIndex = 0, baseEnd = basesToCheck.size(); baseIndex < baseEnd; ++baseIndex) {
+        PyTypeObject *baseType = basesToCheck[baseIndex];
+        PyObject *attrs = baseType->tp_dict;
+        PyObject *key = 0;
+        PyObject *value = 0;
+        Py_ssize_t pos = 0;
 
-    Shiboken::AutoDecRef slotAttrName(Shiboken::String::fromCString(PYSIDE_SLOT_LIST_ATTR));
-
-    while (PyDict_Next(attrs, &pos, &key, &value)) {
-        if (Property::checkType(value)) {
-            // Leave the properties to be register after signals because they may depend on notify signals
-            int index = d.superdata->indexOfProperty(Shiboken::String::toCString(key));
-            if (index == -1)
-                properties << PropPair(Shiboken::String::toCString(key), value);
-        } else if (Signal::checkType(value)) { // Register signals
-            PySideSignal* data = reinterpret_cast<PySideSignal*>(value);
-            const char* signalName = Shiboken::String::toCString(key);
-            data->signalName = strdup(signalName);
-            QByteArray sig;
-            sig.reserve(128);
-            for (int i = 0; i < data->signaturesSize; ++i) {
-                sig = signalName;
-                sig += '(';
-                if (data->signatures[i])
-                    sig += data->signatures[i];
-                sig += ')';
-                if (d.superdata->indexOfSignal(sig) == -1)
-                    addSignal(sig, "void");
-            }
-        } else if (PyFunction_Check(value)) { // Register slots
-            if (PyObject_HasAttr(value, slotAttrName)) {
-                PyObject* signatureList = PyObject_GetAttr(value, slotAttrName);
-                for(Py_ssize_t i = 0, i_max = PyList_Size(signatureList); i < i_max; ++i) {
-                    PyObject* signature = PyList_GET_ITEM(signatureList, i);
-                    QByteArray sig(Shiboken::String::toCString(signature));
-                    //slot the slot type and signature
-                    QList<QByteArray> slotInfo = sig.split(' ');
-                    int index = d.superdata->indexOfSlot(slotInfo[1]);
-                    if (index == -1)
-                        addSlot(slotInfo[1], slotInfo[0]);
+        while (PyDict_Next(attrs, &pos, &key, &value)) {
+            if (Signal::checkType(value)) {
+                // Register signals.
+                PySideSignal *data = reinterpret_cast<PySideSignal *>(value);
+                const char *signalName = Shiboken::String::toCString(key);
+                data->signalName = strdup(signalName);
+                QByteArray sig;
+                sig.reserve(128);
+                for (int i = 0; i < data->signaturesSize; ++i) {
+                    sig = signalName;
+                    sig += '(';
+                    if (data->signatures[i])
+                        sig += data->signatures[i];
+                    sig += ')';
+                    if (d.superdata->indexOfSignal(sig) == -1)
+                        addSignal(sig, "void");
                 }
             }
         }
     }
 
-    // Register properties
-    foreach (const PropPair &propPair, properties)
-        addProperty(propPair.first, propPair.second);
+    Shiboken::AutoDecRef slotAttrName(Shiboken::String::fromCString(PYSIDE_SLOT_LIST_ATTR));
+    // PYSIDE-315: Now take care of the rest.
+    // Signals and slots should be separated, unless the types are modified, later.
+    // We check for this using "is_sorted()". Sorting no longer happens at all.
+    for (int baseIndex = 0, baseEnd = basesToCheck.size(); baseIndex < baseEnd; ++baseIndex) {
+        PyTypeObject *baseType = basesToCheck[baseIndex];
+        PyObject *attrs = baseType->tp_dict;
+        PyObject *key = 0;
+        PyObject *value = 0;
+        Py_ssize_t pos = 0;
 
+        typedef std::pair<const char *, PyObject *> PropPair;
+        QVector<PropPair> properties;
 
+        while (PyDict_Next(attrs, &pos, &key, &value)) {
+            if (Property::checkType(value)) {
+                // Leave the properties to be registered after signals because they may depend on
+                // notify signals.
+                int index = d.superdata->indexOfProperty(Shiboken::String::toCString(key));
+                if (index == -1)
+                    properties << PropPair(Shiboken::String::toCString(key), value);
+            } else if (PyFunction_Check(value)) {
+                // Register slots.
+                if (PyObject_HasAttr(value, slotAttrName)) {
+                    PyObject *signatureList = PyObject_GetAttr(value, slotAttrName);
+                    for (Py_ssize_t i = 0, i_max = PyList_Size(signatureList); i < i_max; ++i) {
+                        PyObject *signature = PyList_GET_ITEM(signatureList, i);
+                        QByteArray sig(Shiboken::String::toCString(signature));
+                        // Split the slot type and its signature.
+                        QList<QByteArray> slotInfo = sig.split(' ');
+                        int index = d.superdata->indexOfSlot(slotInfo[1]);
+                        if (index == -1)
+                            addSlot(slotInfo[1], slotInfo[0]);
+                    }
+                }
+            }
+        }
+
+        // Register properties
+        foreach (const PropPair &propPair, properties)
+            addProperty(propPair.first, propPair.second);
+    }
 }
 
 /*!
@@ -696,6 +738,26 @@ void DynamicQMetaObject::DynamicQMetaObjectPrivate::writeStringData(char *out,  
    }
 }
 
+QList<MethodData>::iterator is_sorted_until(QList<MethodData>::iterator first,
+                                            QList<MethodData>::iterator last,
+                                            bool comp(const MethodData &m1, const MethodData &m2))
+{
+    if (first != last) {
+        QList<MethodData>::iterator next = first;
+        while (++next != last) {
+            if (comp(*next, *first))
+                return next;
+            ++first;
+        }
+    }
+    return last;
+}
+
+bool is_sorted(QList<MethodData>::iterator first, QList<MethodData>::iterator last,
+               bool comp(const MethodData &m1, const MethodData &m2))
+{
+    return is_sorted_until(first, last, comp) == last;
+}
 
 void DynamicQMetaObject::DynamicQMetaObjectPrivate::updateMetaObject(QMetaObject* metaObj)
 {
@@ -731,7 +793,33 @@ void DynamicQMetaObject::DynamicQMetaObjectPrivate::updateMetaObject(QMetaObject
     // Write methods first, then properties, to be consistent with moc.
     // Write signals/slots (signals must be written first, see indexOfMethodRelative in
     // qmetaobject.cpp).
-    qStableSort(m_methods.begin(), m_methods.end(), sortMethodSignalSlot);
+
+    QList<MethodData>::iterator it;
+    // PYSIDE-315: Instead of sorting the items and maybe breaking indices,
+    // we ensure that the signals and slots are sorted by the improved parsePythonType().
+    // The order can only become distorted if the class is modified after creation.
+    // In that case, we give a warning.
+    if (!is_sorted(m_methods.begin(), m_methods.end(), sortMethodSignalSlot)) {
+        const char *metaObjectName = this->m_className.data();
+        PyObject *txt = PyBytes_FromFormat("\n\n*** Sort Warning ***\n"
+                            "Signals and slots in QMetaObject '%s' are not ordered correctly, "
+                            "this may lead to issues.\n", metaObjectName);
+        it = m_methods.begin();
+        QList<MethodData>::iterator end = m_methods.end();
+        QList<MethodData>::iterator until = is_sorted_until(m_methods.begin(), m_methods.end(),
+                                                            sortMethodSignalSlot);
+        for (; it != end; ++it) {
+            PyObject *atxt = PyBytes_FromFormat("%d%s %s %s\n", it - m_methods.begin() + 1,
+                                 until >= it + 1 ? " " : "!",
+                                 it->methodType() == QMetaMethod::Signal ? "Signal" : "Slot  ",
+                                 it->signature().data() );
+            PyBytes_ConcatAndDel(&txt, atxt);
+        }
+        PyErr_WarnEx(PyExc_RuntimeWarning, PyBytes_AsString(txt), 0);
+        Py_DECREF(txt);
+        // Prevent a warning from being turned into an error. We cannot easily unwind.
+        PyErr_Clear();
+    }
 
     if (m_methods.size()) {
         if (data[5] == 0)
@@ -742,8 +830,7 @@ void DynamicQMetaObject::DynamicQMetaObjectPrivate::updateMetaObject(QMetaObject
 
     // Write signal/slots parameters.
     if (m_methods.size()) {
-       QList<MethodData>::iterator it = m_methods.begin();
-       for (; it != m_methods.end(); ++it) {
+       for (it = m_methods.begin(); it != m_methods.end(); ++it) {
           QList<QByteArray> paramTypeNames = it->parameterTypes();
           int paramCount = paramTypeNames.size();
           for (int i = -1; i < paramCount; ++i) {
@@ -805,7 +892,8 @@ void DynamicQMetaObject::DynamicQMetaObjectPrivate::updateMetaObject(QMetaObject
 
     // Create the m_metadata string.
     int size = blobSize(strings);
-    char *blob = reinterpret_cast<char *>(realloc((char*)metaObj->d.stringdata, size));
+    char *blob =
+        reinterpret_cast<char *>(realloc(reinterpret_cast<char *>(const_cast<QByteArrayData *>(metaObj->d.stringdata)), size));
     writeStringData(blob, strings);
 
     metaObj->d.stringdata = reinterpret_cast<const QByteArrayData *>(blob);

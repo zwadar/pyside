@@ -52,8 +52,20 @@
 namespace PySide {
 namespace Signal {
     //aux
+    class SignalSignature {
+    public:
+        SignalSignature() : m_attributes(QMetaMethod::Compatibility) {}
+        SignalSignature(QByteArray parameterTypes) : m_parameterTypes(parameterTypes),
+            m_attributes(QMetaMethod::Compatibility) {}
+        SignalSignature(QByteArray parameterTypes, QMetaMethod::Attributes attributes) :
+            m_parameterTypes(parameterTypes),
+            m_attributes(attributes) {}
+        QByteArray m_parameterTypes;
+        QMetaMethod::Attributes m_attributes;
+    };
+
     static char*        buildSignature(const char*, const char*);
-    static void         appendSignature(PySideSignal*, char*);
+    static void         appendSignature(PySideSignal*, const SignalSignature &);
     static void         instanceInitialize(PySideSignalInstance*, PyObject*, PySideSignal*, PyObject*, int);
     static char*        parseSignature(PyObject*);
     static PyObject*    buildQtCompatible(const char*);
@@ -278,12 +290,21 @@ int signalTpInit(PyObject* self, PyObject* args, PyObject* kwds)
         PyObject* arg = PyTuple_GET_ITEM(args, i);
         if (PySequence_Check(arg) && !Shiboken::String::check(arg)) {
             tupledArgs = true;
-            PySide::Signal::appendSignature(data, PySide::Signal::parseSignature(arg));
+            char *sig = PySide::Signal::parseSignature(arg);
+            PySide::Signal::appendSignature(
+                        data,
+                        PySide::Signal::SignalSignature(sig));
+            free(sig);
         }
     }
 
-    if (!tupledArgs)
-        PySide::Signal::appendSignature(data, PySide::Signal::parseSignature(args));
+    if (!tupledArgs) {
+        char *sig = PySide::Signal::parseSignature(args);
+        PySide::Signal::appendSignature(
+                    data,
+                    PySide::Signal::SignalSignature(sig));
+        free(sig);
+    }
 
     return 1;
 }
@@ -299,6 +320,7 @@ void signalFree(void* self)
     }
 
     free(data->signatures);
+    free(data->signatureAttributes);
     free(data->signalName);
     data->initialized = 0;
     data->signaturesSize = 0;
@@ -421,11 +443,37 @@ PyObject* signalInstanceConnect(PyObject* self, PyObject* args, PyObject* kwds)
     return 0;
 }
 
+int argCountInSignature(const char *signature)
+{
+    return QByteArray(signature).count(",") + 1;
+}
+
 PyObject* signalInstanceEmit(PyObject* self, PyObject* args)
 {
     PySideSignalInstance* source = reinterpret_cast<PySideSignalInstance*>(self);
 
     Shiboken::AutoDecRef pyArgs(PyList_New(0));
+    int numArgsGiven = PySequence_Fast_GET_SIZE(args);
+    int numArgsInSignature = argCountInSignature(source->d->signature);
+
+    // If number of arguments given to emit is smaller than the first source signature expects,
+    // it is possible it's a case of emitting a signal with default parameters.
+    // Search through all the overloaded signals with the same name, and try to find a signature
+    // with the same number of arguments as given to emit, and is also marked as a cloned method
+    // (which in metaobject parlance means a signal with default parameters).
+    // @TODO: This should be improved to take into account argument types as well. The current
+    // assumption is there are no signals which are both overloaded on argument types and happen to
+    // have signatures with default parameters.
+    if (numArgsGiven < numArgsInSignature) {
+        PySideSignalInstance *possibleDefaultInstance = source;
+        while ((possibleDefaultInstance = possibleDefaultInstance->d->next)) {
+            if (possibleDefaultInstance->d->attributes & QMetaMethod::Cloned
+                    && argCountInSignature(possibleDefaultInstance->d->signature) == numArgsGiven) {
+                source = possibleDefaultInstance;
+                break;
+            }
+        }
+    }
     Shiboken::AutoDecRef sourceSignature(PySide::Signal::buildQtCompatible(source->d->signature));
 
     PyList_Append(pyArgs, sourceSignature);
@@ -566,7 +614,7 @@ void init(PyObject* module)
         return;
 
     Py_INCREF(&PySideSignalType);
-    PyModule_AddObject(module, SIGNAL_CLASS_NAME, ((PyObject*)&PySideSignalType));
+    PyModule_AddObject(module, SIGNAL_CLASS_NAME, reinterpret_cast<PyObject *>(&PySideSignalType));
 
     if (PyType_Ready(&PySideSignalInstanceType) < 0)
         return;
@@ -591,7 +639,7 @@ void updateSourceObject(PyObject* source)
 
     while (PyDict_Next(objType->tp_dict, &pos, &key, &value)) {
         if (PyObject_TypeCheck(value, &PySideSignalType)) {
-            Shiboken::AutoDecRef signalInstance((PyObject*)PyObject_New(PySideSignalInstance, &PySideSignalInstanceType));
+            Shiboken::AutoDecRef signalInstance(reinterpret_cast<PyObject *>(PyObject_New(PySideSignalInstance, &PySideSignalInstanceType)));
             instanceInitialize(signalInstance.cast<PySideSignalInstance*>(), key, reinterpret_cast<PySideSignal*>(value), source, 0);
             PyObject_SetAttr(source, key, signalInstance);
         }
@@ -629,7 +677,10 @@ char* getTypeName(PyObject* type)
     } else if (type == Py_None) { // Must be checked before as Shiboken::String::check accepts Py_None
         return strdup("void");
     } else if (Shiboken::String::check(type)) {
-        return strdup(Shiboken::String::toCString(type));
+        const char *result = Shiboken::String::toCString(type);
+        if (!strcmp(result, "qreal"))
+            result = sizeof(qreal) == sizeof(double) ? "double" : "float";
+        return strdup(result);
     }
     return 0;
 }
@@ -666,16 +717,19 @@ char* parseSignature(PyObject* args)
     return signature;
 }
 
-void appendSignature(PySideSignal* self, char* signature)
+void appendSignature(PySideSignal* self, const SignalSignature &signature)
 {
     self->signaturesSize++;
 
     if (self->signaturesSize > 1) {
-        self->signatures = reinterpret_cast<char**>(realloc(self->signatures, sizeof(char**) * self->signaturesSize));
+        self->signatures = reinterpret_cast<char **>(realloc(self->signatures, sizeof(char *) * self->signaturesSize));
+        self->signatureAttributes = reinterpret_cast<int *>(realloc(self->signatureAttributes, sizeof(int) * self->signaturesSize));
     } else {
-        self->signatures = reinterpret_cast<char**>(malloc(sizeof(char**)));
+        self->signatures = reinterpret_cast<char **>(malloc(sizeof(char *)));
+        self->signatureAttributes = reinterpret_cast<int *>(malloc(sizeof(int)));
     }
-    self->signatures[self->signaturesSize - 1] = signature;
+    self->signatures[self->signaturesSize - 1] = strdup(signature.m_parameterTypes);
+    self->signatureAttributes[self->signaturesSize - 1] = signature.m_attributes;
 }
 
 PySideSignalInstance* initialize(PySideSignal* self, PyObject* name, PyObject* object)
@@ -702,6 +756,7 @@ void instanceInitialize(PySideSignalInstance* self, PyObject* name, PySideSignal
 
     selfPvt->source = source;
     selfPvt->signature = buildSignature(self->d->signalName, data->signatures[index]);
+    selfPvt->attributes = data->signatureAttributes[index];
     selfPvt->homonymousMethod = 0;
     if (data->homonymousMethod) {
         selfPvt->homonymousMethod = data->homonymousMethod;
@@ -753,6 +808,7 @@ PySideSignalInstance* newObjectFromMethod(PyObject* source, const QList<QMetaMet
         // separe SignalName
         selfPvt->signalName = strdup(cppName.data());
         selfPvt->signature = strdup(m.methodSignature());
+        selfPvt->attributes = m.attributes();
         selfPvt->homonymousMethod = 0;
         selfPvt->next = 0;
     }
@@ -767,6 +823,7 @@ PySideSignal* newObject(const char* name, ...)
     self->signalName = strdup(name);
     self->signaturesSize = 0;
     self->signatures = 0;
+    self->signatureAttributes = 0;
     self->initialized = 0;
     self->homonymousMethod = 0;
 
@@ -775,9 +832,9 @@ PySideSignal* newObject(const char* name, ...)
 
     while (sig != NULL) {
         if (strcmp(sig, "void") == 0)
-            appendSignature(self, strdup(""));
+            appendSignature(self, SignalSignature(""));
         else
-            appendSignature(self, strdup(sig));
+            appendSignature(self, SignalSignature(sig));
 
         sig = va_arg(listSignatures, char*);
     }
@@ -819,14 +876,14 @@ static void _addSignalToWrapper(SbkObjectType* wrapperType, const char* signalNa
 }
 
 // This function is used by qStableSort to promote empty signatures
-static bool compareSignals(const QByteArray &sig1, const QByteArray &)
+static bool compareSignals(const SignalSignature &sig1, const SignalSignature &)
 {
-    return sig1.isEmpty();
+    return sig1.m_parameterTypes.isEmpty();
 }
 
 void registerSignals(SbkObjectType* pyObj, const QMetaObject* metaObject)
 {
-    typedef QHash<QByteArray, QList<QByteArray> > SignalSigMap;
+    typedef QHash<QByteArray, QList<SignalSignature> > SignalSigMap;
     SignalSigMap signalsFound;
     for (int i = metaObject->methodOffset(), max = metaObject->methodCount(); i < max; ++i) {
         QMetaMethod method = metaObject->method(i);
@@ -834,7 +891,11 @@ void registerSignals(SbkObjectType* pyObj, const QMetaObject* metaObject)
         if (method.methodType() == QMetaMethod::Signal) {
             QByteArray methodName(method.methodSignature());
             methodName.chop(methodName.size() - methodName.indexOf('('));
-            signalsFound[methodName] << join(method.parameterTypes(), ",");
+            SignalSignature signature;
+            signature.m_parameterTypes = join(method.parameterTypes(), ",");
+            if (method.attributes() & QMetaMethod::Cloned)
+                signature.m_attributes = QMetaMethod::Cloned;
+            signalsFound[methodName] << signature;
         }
     }
 
@@ -845,6 +906,7 @@ void registerSignals(SbkObjectType* pyObj, const QMetaObject* metaObject)
         self->signalName = strdup(it.key().constData());
         self->signaturesSize = 0;
         self->signatures = 0;
+        self->signatureAttributes = 0;
         self->initialized = 0;
         self->homonymousMethod = 0;
 
@@ -852,11 +914,13 @@ void registerSignals(SbkObjectType* pyObj, const QMetaObject* metaObject)
         qStableSort(it.value().begin(), it.value().end(), &compareSignals);
         SignalSigMap::mapped_type::const_iterator j = it.value().begin();
         SignalSigMap::mapped_type::const_iterator endJ = it.value().end();
-        for (; j != endJ; ++j)
-            appendSignature(self, strdup(j->constData()));
+        for (; j != endJ; ++j) {
+            const SignalSignature &sig = *j;
+            appendSignature(self, sig);
+        }
 
         _addSignalToWrapper(pyObj, it.key(), self);
-        Py_DECREF((PyObject*) self);
+        Py_DECREF(reinterpret_cast<PyObject *>(self));
     }
 }
 
@@ -925,9 +989,10 @@ QString getCallbackSignature(const char* signal, QObject* receiver, PyObject* ca
         useSelf = isMethod;
         numArgs = objCode->co_flags & CO_VARARGS ? -1 : objCode->co_argcount;
     } else if (PyCFunction_Check(callback)) {
-        functionName = ((PyCFunctionObject*)callback)->m_ml->ml_name;
-        useSelf = ((PyCFunctionObject*)callback)->m_self;
-        int flags = ((PyCFunctionObject*)callback)->m_ml->ml_flags;
+        const PyCFunctionObject *funcObj = reinterpret_cast<const PyCFunctionObject *>(callback);
+        functionName = funcObj->m_ml->ml_name;
+        useSelf = funcObj->m_self;
+        const int flags = funcObj->m_ml->ml_flags;
 
         if (receiver) {
             //Search for signature on metaobject

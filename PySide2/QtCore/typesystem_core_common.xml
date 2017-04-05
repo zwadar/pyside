@@ -288,11 +288,6 @@
         delete[] str;
         return %out;
         </native-to-target>
-        <target-to-native>
-            <add-conversion type="PyObject" check="Shiboken::String::check(%in) || %in == Py_None">
-            %out = %OUTTYPE();
-            </add-conversion>
-        </target-to-native>
     </conversion-rule>
   </primitive-type>
   <primitive-type name="QChar">
@@ -902,8 +897,8 @@
     <enum-type name="HitTestAccuracy"/>
     <enum-type name="ImageConversionFlag" flags="ImageConversionFlags" />
     <enum-type name="InputMethodHint" flags="InputMethodHints" since="4.6"/>
-    <enum-type name="InputMethodQuery"/>
-    <enum-type name="EnterKeyType"/>
+    <enum-type name="InputMethodQuery" flags="InputMethodQueries" />
+    <enum-type name="EnterKeyType" since="5.6" />
     <enum-type name="ItemDataRole" force-integer="yes" />
     <enum-type name="ItemFlag" flags="ItemFlags"/>
     <enum-type name="ItemSelectionMode"/>
@@ -1775,6 +1770,11 @@
     </add-function>
   </value-type> -->
 
+  <value-type name="QMimeType" since="5.0" />
+  <object-type name="QMimeDatabase" since="5.0">
+    <enum-type name="MatchMode" />
+  </object-type>
+
   <value-type name="QLocale">
     <enum-type name="Country" />
     <enum-type name="FormatType"/>
@@ -2330,7 +2330,7 @@
   </object-type>
   <value-type name="QUrl" hash-function="PySide::hash">
     <!-- Qt5: lots of changes -->
-    <enum-type name="ComponentFormattingOption" flags="ComponentFormattingOptions" flags="FormattingOptions"/>
+    <enum-type name="ComponentFormattingOption" flags="ComponentFormattingOptions,FormattingOptions"/>
     <!-- note: above duplication of attribute is not by default XML compliant! -->
     <enum-type name="UrlFormattingOption" />
     <enum-type name="UserInputResolutionOption" flags="UserInputResolutionOptions"/>
@@ -3172,6 +3172,9 @@
   </object-type>
   <object-type name="QSignalMapper" />
 
+  <object-type name="QCollatorSortKey" since="5.2" />
+  <object-type name="QCollator" since="5.2" />
+
   <object-type name="QCoreApplication">
     <!--Qt5: gone <enum-type name="Encoding" /> -->
     <enum-type identified-by-value="ApplicationFlags" since="4.8" revision="4800"/>
@@ -3605,6 +3608,10 @@
     <modify-function signature="read(qint64)" allow-thread="yes"/>
     <modify-function signature="readLine(qint64)" allow-thread="yes"/>
     <modify-function signature="readAll()" allow-thread="yes"/>
+  </object-type>
+  <object-type name="QStandardPaths" since="5.0">
+    <enum-type name="StandardLocation"/>
+    <enum-type name="LocateOption" flags="LocateOptions"/>
   </object-type>
   <object-type name="QSystemSemaphore">
     <enum-type name="AccessMode"/>

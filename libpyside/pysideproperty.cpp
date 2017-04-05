@@ -181,7 +181,7 @@ static PyObject *qpropertyTpNew(PyTypeObject *subtype, PyObject * /* args */, Py
     pData->designable = true;
     pData->scriptable = true;
     pData->stored = true;
-    return (PyObject*) me;
+    return reinterpret_cast<PyObject *>(me);
 }
 
 int qpropertyTpInit(PyObject* self, PyObject* args, PyObject* kwds)
@@ -339,12 +339,7 @@ static PyObject* getFromType(PyTypeObject* type, PyObject* name)
             if (attr)
                 return attr;
         }
-        // PYSIDE-79: needed to capture this code path - attr not found
-        return PyErr_Format(PyExc_RuntimeError, "*** Attribute '%s' not found!",
-                            Shiboken::String::toCString(name));
     }
-    Py_INCREF(attr); // PYSIDE-79: missing incref. PyDict_GetItem borrows a ref.
-    // This was not central to the error, but caused sometimes later crashes.
     return attr;
 }
 
@@ -359,7 +354,7 @@ void init(PyObject* module)
         return;
 
     Py_INCREF(&PySidePropertyType);
-    PyModule_AddObject(module, QPROPERTY_CLASS_NAME, ((PyObject*)&PySidePropertyType));
+    PyModule_AddObject(module, QPROPERTY_CLASS_NAME, reinterpret_cast<PyObject *>(&PySidePropertyType));
 }
 
 bool checkType(PyObject* pyObj)

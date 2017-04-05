@@ -37,8 +37,12 @@ ${CMAKE_CURRENT_BINARY_DIR}/testbinding/testbinding_module_wrapper.cpp
 
 make_path(testbinding_include_dirs  ${pyside2_BINARY_DIR}
                                     ${CMAKE_CURRENT_SOURCE_DIR}
+                                    ${CMAKE_CURRENT_SOURCE_DIR}/../../PySide2
+                                    ${CMAKE_CURRENT_SOURCE_DIR}/../../libpyside
                                     ${QT_INCLUDE_DIR}
                                     ${QT_INCLUDE_DIR}/QtCore
+                                    ${QT_INCLUDE_DIR}/QtGui
+                                    ${QT_INCLUDE_DIR}/QtWidgets
                                     )
 
 make_path(testbinding_typesystem_path ${CMAKE_CURRENT_SOURCE_DIR}
@@ -112,3 +116,5 @@ PYSIDE_TEST(version_test.py)
 PYSIDE_TEST(typedef_signal_test.py)
 PYSIDE_TEST(bug_1016.py)
 PYSIDE_TEST(utils_test.py)
+PYSIDE_TEST(mixin_signal_slots_test.py)
+PYSIDE_TEST(signal_slot_warning.py)

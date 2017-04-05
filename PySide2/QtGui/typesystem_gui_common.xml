@@ -188,6 +188,20 @@
   <rejection class="QPolygon" function-name="point"/>
   <rejection class="QActionGroup" function-name="selected"/>
   <rejection class="QPaintEngine" function-name="fix_neg_rect"/>
+
+  <primitive-type name="WId" target-lang-api-name="PyLong">
+    <conversion-rule>
+      <native-to-target>
+      return PyLong_FromVoidPtr(reinterpret_cast&lt;void *&gt;(%in));
+      </native-to-target>
+      <target-to-native>
+        <add-conversion type="PyLong">
+          %out = reinterpret_cast&lt;%OUTTYPE&gt;(PyLong_AsVoidPtr(%in));
+        </add-conversion>
+      </target-to-native>
+    </conversion-rule>
+  </primitive-type>
+
   <value-type name="QTransform">
     <enum-type name="TransformationType"/>
     <add-function signature="__repr__" return-type="PyObject*">
@@ -1468,6 +1482,7 @@
   </object-type>
   <object-type name="QPyTextObject" />
 
+  <object-type name="QDesktopServices" since="4.2" />
   <object-type name="QDoubleValidator">
       <enum-type name="Notation"/>
   </object-type>
@@ -1722,6 +1737,7 @@
       </modify-argument>
     </modify-function>
   </object-type>
+  <object-type name="QExposeEvent" polymorphic-id-expression="%1-&gt;type() == QEvent::Expose" />
   <object-type name="QFileOpenEvent" polymorphic-id-expression="%1-&gt;type() == QEvent::FileOpen" />
   <object-type name="QFocusEvent" polymorphic-id-expression="%1-&gt;type() == QEvent::FocusIn || %1-&gt;type() == QEvent::FocusOut" />
   <object-type name="QHelpEvent" copyable="false" polymorphic-id-expression="%1-&gt;type() == QEvent::ToolTip || %1-&gt;type() == QEvent::WhatsThis"/>
@@ -2134,6 +2150,7 @@
     </modify-function>
     <modify-function signature="print(QPagedPaintDevice*)const" rename="print_" />
   </object-type>
+  <object-type name="QTextDocumentWriter" since="4.5" />
   <object-type name="QTextTable">
     <extra-includes>
       <include file-name="QTextCursor" location="global"/>
@@ -3214,6 +3231,40 @@
     <inject-code class="native" file="glue/qguiapplication_init.cpp" position="beginning" />
 
   </object-type>
+
+  <value-type name="QAccessible">
+      <value-type name="State"/>
+      <enum-type name="Role"/>
+      <enum-type name="Text"/>
+      <enum-type name="RelationFlag"/>
+      <enum-type name="InterfaceType"/>
+      <enum-type name="TextBoundaryType"/>
+      <enum-type name="Event"/>
+  </value-type>
+  <object-type name="QAccessibleInterface">
+  </object-type>
+  <object-type name="QOpenGLBuffer" since="5.0">
+    <enum-type name="Access" />
+    <enum-type name="RangeAccessFlag" flags="RangeAccessFlags" />
+    <enum-type name="Type" />
+    <enum-type name="UsagePattern" />
+  </object-type>
+  <object-type name="QOpenGLContext">
+    <enum-type name="OpenGLModuleType" />
+  </object-type>
+  <object-type name="QOpenGLFramebufferObject">
+    <enum-type name="Attachment" />
+  </object-type>
+  <object-type name="QOpenGLShader" >
+    <enum-type name="ShaderTypeBit" flags="ShaderType" />
+  </object-type>
+  <!-- Temporarily disable type, because it causes segfault on Linux due to incorrect parsing
+       of the void setUniformValue(const char *name, const GLfloat value[2][2]); method.
+       The float[][] ends up with an "Array" cpp signature, which obviously can't be found in the
+       typesystem.
+  <object-type name="QOpenGLShaderProgram" />
+  -->
+  <object-type name="QScreen" />
 
 </typesystem>
 

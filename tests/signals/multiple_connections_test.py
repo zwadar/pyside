@@ -51,13 +51,13 @@ class MultipleSignalConnections(unittest.TestCase):
             args = tuple()
         for rec in receivers:
             rec.setUp()
-            self.assert_(QObject.connect(sender, SIGNAL(signal), rec.cb))
+            self.assertTrue(QObject.connect(sender, SIGNAL(signal), rec.cb))
             rec.args = tuple(args)
 
         emitter(*args)
 
         for rec in receivers:
-            self.assert_(rec.called)
+            self.assertTrue(rec.called)
 
 
 class PythonMultipleSlots(UsesQCoreApplication, MultipleSignalConnections):
@@ -71,7 +71,7 @@ class PythonMultipleSlots(UsesQCoreApplication, MultipleSignalConnections):
 
         sender = Dummy()
         receivers = [BasicPySlotCase() for x in range(10)]
-        self.run_many(sender, 'foobar', partial(sender.emit,SIGNAL('foobar')), receivers, (0, ))
+        self.run_many(sender, 'foobar(int)', partial(sender.emit,SIGNAL('foobar(int)')), receivers, (0, ))
 
 
 class QProcessMultipleSlots(UsesQCoreApplication, MultipleSignalConnections):

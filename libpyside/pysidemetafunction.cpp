@@ -133,7 +133,7 @@ void init(PyObject* module)
     if (PyType_Ready(&PySideMetaFunctionType) < 0)
         return;
 
-    PyModule_AddObject(module, "MetaFunction", ((PyObject*)&PySideMetaFunctionType));
+    PyModule_AddObject(module, "MetaFunction", reinterpret_cast<PyObject *>(&PySideMetaFunctionType));
 }
 
 PySideMetaFunction* newObject(QObject* source, int methodIndex)
@@ -163,8 +163,17 @@ bool call(QObject* self, int methodIndex, PyObject* args, PyObject** retVal)
     Shiboken::AutoDecRef sequence(PySequence_Fast(args, 0));
     int numArgs = PySequence_Fast_GET_SIZE(sequence.object()) + 1;
 
-    if (numArgs - 1 != argTypes.count()) {
-        PyErr_Format(PyExc_TypeError, "%s only accepts %d arguments, %d given!", method.methodSignature().constData(), argTypes.count(), numArgs);
+    if (numArgs - 1 > argTypes.count()) {
+        PyErr_Format(PyExc_TypeError, "%s only accepts %d argument(s), %d given!",
+                     method.methodSignature().constData(),
+                     argTypes.count(), numArgs - 1);
+        return false;
+    }
+
+    if (numArgs - 1 < argTypes.count()) {
+        PyErr_Format(PyExc_TypeError, "%s needs %d argument(s), %d given!",
+                     method.methodSignature().constData(),
+                     argTypes.count(), numArgs - 1);
         return false;
     }
 
@@ -196,7 +205,7 @@ bool call(QObject* self, int methodIndex, PyObject* args, PyObject** retVal)
                                                   "registered on meta type: %s", typeName.data());
                     break;
                 }
-                methValues[i] = QVariant(typeId, (void*) 0);
+                methValues[i] = QVariant(typeId, static_cast<const void *>(0));
             }
             methArgs[i] = methValues[i].data();
             if (i == 0) // Don't do this for return type

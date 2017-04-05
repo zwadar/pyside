@@ -68,34 +68,37 @@ class TestQObjectConnectNotify(UsesQCoreApplication):
         sender = Obj()
         receiver = QObject()
         sender.connect(SIGNAL("destroyed()"), receiver, SLOT("deleteLater()"))
-        self.assert_(sender.con_notified)
-        self.assertEqual(sender.signal, SIGNAL("destroyed()"))
+        self.assertTrue(sender.con_notified)
+        # When connecting to a regular slot, and not a python callback function, QObject::connect
+        # will use the non-cloned method signature, so connecting to destroyed() will actually
+        # connect to destroyed(QObject*).
+        self.assertEqual(sender.signal.methodSignature(), "destroyed(QObject*)")
         sender.disconnect(SIGNAL("destroyed()"), receiver, SLOT("deleteLater()"))
-        self.assert_(sender.dis_notified)
+        self.assertTrue(sender.dis_notified)
 
     def testPySignal(self):
         sender = Obj()
         receiver = QObject()
         sender.connect(SIGNAL("foo()"), receiver, SLOT("deleteLater()"))
-        self.assert_(sender.con_notified)
+        self.assertTrue(sender.con_notified)
         sender.disconnect(SIGNAL("foo()"), receiver, SLOT("deleteLater()"))
-        self.assert_(sender.dis_notified)
+        self.assertTrue(sender.dis_notified)
 
     def testPySlots(self):
         sender = Obj()
         receiver = QObject()
         sender.connect(SIGNAL("destroyed()"), cute_slot)
-        self.assert_(sender.con_notified)
+        self.assertTrue(sender.con_notified)
         sender.disconnect(SIGNAL("destroyed()"), cute_slot)
-        self.assert_(sender.dis_notified)
+        self.assertTrue(sender.dis_notified)
 
     def testpyAll(self):
         sender = Obj()
         receiver = QObject()
         sender.connect(SIGNAL("foo()"), cute_slot)
-        self.assert_(sender.con_notified)
+        self.assertTrue(sender.con_notified)
         sender.disconnect(SIGNAL("foo()"), cute_slot)
-        self.assert_(sender.dis_notified)
+        self.assertTrue(sender.dis_notified)
 
 if __name__ == '__main__':
     unittest.main()

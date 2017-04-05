@@ -32,7 +32,7 @@
 
 import unittest
 
-from PySide2.QtCore import QObject, SIGNAL
+from PySide2.QtCore import QObject, SIGNAL, Slot
 from helper import UsesQCoreApplication
 
 class MyObject(QObject):
@@ -40,6 +40,9 @@ class MyObject(QObject):
         QObject.__init__(self, parent)
         self._slotCalledCount = 0
 
+    # this '@Slot()' is needed to get the right sort order in testSharedSignalEmission.
+    # For some reason, it also makes the tests actually work!
+    @Slot()
     def mySlot(self):
         self._slotCalledCount = self._slotCalledCount + 1
 
@@ -55,7 +58,7 @@ class StaticMetaObjectTest(UsesQCoreApplication):
 
         o.connect(SIGNAL("foo()"), o2.mySlot)
         # SIGNAL foo create after connect
-        self.assert_(o.metaObject().indexOfSignal("foo()") > 0)
+        self.assertTrue(o.metaObject().indexOfSignal("foo()") > 0)
 
         # SIGNAL does not propagate to others objects of the same type
         self.assertEqual(o2.metaObject().indexOfSignal("foo()"), -1)

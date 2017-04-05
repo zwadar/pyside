@@ -271,7 +271,8 @@ PyObject* getMetaDataFromQObject(QObject* cppSelf, PyObject* self, PyObject* nam
             QList<QMetaMethod> signalList;
             for(int i=0, i_max = metaObject->methodCount(); i < i_max; i++) {
                 QMetaMethod method = metaObject->method(i);
-                const char* methSig = method.methodSignature();
+                const QByteArray methSig_ = method.methodSignature();
+                const char *methSig = methSig_.constData();
                 bool methMacth = !std::strncmp(cname, methSig, cnameLen) && methSig[cnameLen] == '(';
                 if (methMacth) {
                     if (method.methodType() == QMetaMethod::Signal) {
@@ -279,8 +280,9 @@ PyObject* getMetaDataFromQObject(QObject* cppSelf, PyObject* self, PyObject* nam
                     } else {
                         PySideMetaFunction* func = MetaFunction::newObject(cppSelf, i);
                         if (func) {
-                            PyObject_SetAttr(self, name, (PyObject*)func);
-                            return (PyObject*)func;
+                            PyObject *result = reinterpret_cast<PyObject *>(func);
+                            PyObject_SetAttr(self, name, result);
+                            return result;
                         }
                     }
                 }
@@ -341,7 +343,7 @@ static const char invalidatePropertyName[] = "_PySideInvalidatePtr";
 
 PyObject* getWrapperForQObject(QObject* cppSelf, SbkObjectType* sbk_type)
 {
-    PyObject* pyOut = (PyObject*)Shiboken::BindingManager::instance().retrieveWrapper(cppSelf);
+    PyObject* pyOut = reinterpret_cast<PyObject *>(Shiboken::BindingManager::instance().retrieveWrapper(cppSelf));
     if (pyOut) {
         Py_INCREF(pyOut);
         return pyOut;
@@ -354,7 +356,7 @@ PyObject* getWrapperForQObject(QObject* cppSelf, SbkObjectType* sbk_type)
     if (!existing.isValid()) {
         QSharedPointer<any_t> shared_with_del((any_t*)cppSelf, invalidatePtr);
         cppSelf->setProperty(invalidatePropertyName, QVariant::fromValue(shared_with_del));
-        pyOut = (PyObject*)Shiboken::BindingManager::instance().retrieveWrapper(cppSelf);
+        pyOut = reinterpret_cast<PyObject *>(Shiboken::BindingManager::instance().retrieveWrapper(cppSelf));
         if (pyOut) {
             Py_INCREF(pyOut);
             return pyOut;
